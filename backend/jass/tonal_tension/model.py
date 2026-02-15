@@ -1,11 +1,29 @@
 from __future__ import annotations
 
+from typing import Sequence
+
 import numpy as np
 
 from ..chroma_index import chroma_bits_to_notes, filter_slash_suggestions
 from ..tis_index import TISIndex
 from .features import compute_features
 from .weights import DEFAULT_WEIGHTS
+
+def minmax01(x: np.ndarray) -> np.ndarray:
+    x = np.asarray(x, dtype=np.float64)
+    finite = np.isfinite(x)
+    out = np.full_like(x, np.nan, dtype=np.float64)
+    if not np.any(finite):
+        return out
+    xmin = float(np.min(x[finite]))
+    xmax = float(np.max(x[finite]))
+    span = xmax - xmin
+    if span > 0:
+        out[finite] = (x[finite] - xmin) / span
+    else:
+        # all finite values are equal -> treat as 0 everywhere
+        out[finite] = 0.0
+    return out
 
 
 def compute_tension(
@@ -52,7 +70,9 @@ def suggest_next_chords(
     top: int = 10,
     weights: dict[str, float] | None = None,
     goal: str = "resolve",
+    progression: Sequence[str] | None = None,
     normalize: bool = True,
+    voice_leading_addition_penalty: int = 4,
     min_notes: int | None = None,
     max_notes: int | None = None,
     d3_function_weights: dict[str, float] | None = None,
@@ -62,23 +82,43 @@ def suggest_next_chords(
         raise ValueError(f"Chord {prev_chord!r} not found in index.")
 
     prev_row = name_to_row[prev_chord]
+    progression_rows: list[int] | None = None
+    if progression:
+        progression_rows = []
+        for name in progression:
+            if name not in name_to_row:
+                raise ValueError(f"Chord {name!r} in progression not found in index.")
+            progression_rows.append(int(name_to_row[name]))
+        if progression_rows and progression_rows[-1] != prev_row:
+            raise ValueError("progression must end with prev_chord.")
+
     # Get the weights used for calculation to compute individual contributions.
     active_weights = weights if weights is not None else DEFAULT_WEIGHTS
+    include_m = float(active_weights.get("m", 0.0)) != 0.0
+    include_h = float(active_weights.get("h", 0.0)) != 0.0
 
     feats = compute_features(
         index,
         prev_row,
         key_root,
         key_mode,
+        progression_rows=progression_rows,
+        voice_leading_addition_penalty=voice_leading_addition_penalty,
+        include_m=include_m,
+        include_h=include_h,
         d3_function_weights=d3_function_weights,
     )
-    tension = compute_tension(feats, weights=active_weights, normalize=False)
-    tension[prev_row] = np.nan
+    tension_raw = compute_tension(feats, weights=active_weights, normalize=normalize)
+    tension_raw[prev_row] = np.nan
+
+    # Normalize final tension to [0, 1] so numeric goals are meaningful on that scale
+    tension = minmax01(tension_raw)
 
     try:
-        target = float(goal)
+        target = float(goal)  # expected to be in [0, 1]
         sort_key = np.abs(tension - target)
     except (ValueError, TypeError):
+        # "build" -> high tension, "resolve" -> low tension
         sort_key = -tension if goal == "build" else tension
 
     order = np.argsort(np.where(np.isnan(sort_key), np.inf, sort_key))
@@ -131,7 +171,9 @@ def suggest_next_chords(
             "d2": float(feats["d2"][i]),
             "d3": float(feats["d3"][i]),
             "c": float(feats["c"][i]),
-            "tension": float(tension[i]),
+            "tension_raw": float(tension_raw[i]),
+            "tension": float(tension[i]),  # normalized 0..1
+
         }
         
         # Merge the weighted contributions into the result dictionary

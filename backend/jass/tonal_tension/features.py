@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Mapping
+from typing import Mapping, Sequence
 
 import numpy as np
 
@@ -13,7 +13,7 @@ from .theory import function_prototypes, key_tis
 _D3_FUNCTION_WEIGHTS: dict[str, float] = {
     # Keys must match `function_prototypes(...)`: "tonic", "subdominant", "dominant".
     # Larger weight => distance-from-that-function matters more in `d3`.
-    "tonic": 1.2,
+    "tonic": 40,
     "subdominant": 1.0,
     "dominant": 1.2,
 }
@@ -25,6 +25,10 @@ def compute_features(
     key_root: str,
     key_mode: str,
     *,
+    progression_rows: Sequence[int] | None = None,
+    voice_leading_addition_penalty: int = 4,
+    include_m: bool = True,
+    include_h: bool = True,
     d3_function_weights: Mapping[str, float] | None = None,
 ) -> dict[str, np.ndarray]:
     """Compute paper-aligned tension indicators for every chord in the index."""
@@ -61,6 +65,5 @@ def compute_features(
     d3 = d3_weighted / d3_total_w if d3_total_w > 0 else np.full(n, np.nan, dtype=np.float64)
 
     c = dissonance_tension_from_tis_norm(index.tis_norm)
-    print(c)
 
     return {"d1": d1, "d2": d2, "d3": d3, "c": c}

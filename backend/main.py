@@ -161,7 +161,7 @@ async def chord_worker():
 
         # Get suggestions for accepted chord (use root name for lookup)
         suggestions = await asyncio.to_thread(
-            _get_suggestions, root_name, None
+            _get_suggestions, root_name, chroma
         )
 
         print(f"[chord_worker] suggestions: {[s['name'] for s in suggestions]}", file=sys.stderr)
@@ -221,7 +221,7 @@ def _get_suggestions(chord_name: str, chroma: list[int] | None = None) -> list[d
     if tis_idx is None:
         return []
     try:
-        result = suggest_chords(chord=chord_name, key="C", index=tis_idx, top=3, goal="resolve")
+        result = suggest_chords(chroma=chroma, key="C", index=tis_idx, top=3, goal="resolve")
         out = []
         for r in result.get("results", []):
             row = int(r["row"])

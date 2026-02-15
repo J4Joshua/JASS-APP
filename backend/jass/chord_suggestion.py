@@ -11,7 +11,13 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-from .chroma_index import chroma_bits_to_notes, filter_slash_suggestions
+from .chroma_index import (
+    CHROMA_LEN,
+    ChromaInputError,
+    bits_to_mask,
+    chroma_bits_to_notes,
+    filter_slash_suggestions,
+)
 from .tis_index import TISIndex
 from .tonal_tension import DEFAULT_WEIGHTS, parse_key
 from .tonal_tension.model import suggest_next_chords as _suggest_next_chords
@@ -28,16 +34,28 @@ def _load_index(index: str | Path | TISIndex) -> TISIndex:
     return TISIndex.from_npz(index_path)
 
 
+def _coerce_chroma_bits(chroma: Sequence[int]) -> list[int]:
+    bits = [int(x) for x in chroma]
+    if len(bits) != CHROMA_LEN:
+        raise ChromaInputError(f"Expected chroma length {CHROMA_LEN}, got {len(bits)}.")
+    for i, b in enumerate(bits):
+        if b not in (0, 1):
+            raise ChromaInputError(f"Bits must be 0/1; got {b!r} at index {i}.")
+    return bits
+
+
 def suggest_chords(
     *,
     chord: str | None = None,
     progression: Sequence[str] | None = None,
     key: str,
+    chroma: Sequence[int] | None = None,
     index: str | Path | TISIndex = "tis_index.npz",
     top: int = 10,
     goal: str = "resolve",
     weights: Mapping[str, float] | None = None,
     normalize: bool = True,
+    voice_leading_addition_penalty: int = 4,
     flats: bool = False,
     include_aliases: bool = False,
     min_notes: int | None = 3,
@@ -51,6 +69,8 @@ def suggest_chords(
     chord:
         Current chord name. If ``progression`` is provided and ``chord`` is None,
         it defaults to the last chord of the progression.
+    chroma:
+        Optional 12-D chroma bit-vector (0/1). If provided, it takes precedence over ``chord``.
     progression:
         Optional progression context ending in ``chord``.
     key:
@@ -80,14 +100,42 @@ def suggest_chords(
     key_root, key_mode = parse_key(key)
 
     prog_list = list(progression) if progression else None
-    chosen_chord = chord
+    name_to_row = idx.build_name_to_row()
+    mask_to_row = idx.build_mask_to_row()
+
+    chosen_row: int | None = None
+    chosen_chord: str | None = None
+    chroma_bits: list[int] | None = None
+
+    # If both are provided, chroma takes precedence.
+    if chroma is not None:
+        chroma_bits = _coerce_chroma_bits(chroma)
+        mask = bits_to_mask(chroma_bits)
+        row = mask_to_row.get(int(mask))
+        if row is None:
+            raise ValueError("Provided chroma vector was not found in the chord index.")
+        chosen_row = int(row)
+        chosen_chord = str(idx.rep_names[chosen_row])
+
+    if chord is not None and chosen_row is None:
+        if chord not in name_to_row:
+            raise ValueError(f"Chord {chord!r} not found in index.")
+        chosen_chord = chord
+        chosen_row = int(name_to_row[chord])
+
     if prog_list:
-        if chosen_chord is None:
-            chosen_chord = prog_list[-1]
-        elif chosen_chord != prog_list[-1]:
-            raise ValueError("chord must match the last chord in progression.")
+        last = prog_list[-1]
+        if last not in name_to_row:
+            raise ValueError(f"Chord {last!r} in progression not found in index.")
+        last_row = int(name_to_row[last])
+        if chosen_row is None:
+            chosen_row = last_row
+            chosen_chord = last
+        elif last_row != chosen_row:
+            raise ValueError("chord/chroma must match the last chord in progression.")
+
     if chosen_chord is None:
-        raise ValueError("Either chord or progression must be provided.")
+        raise ValueError("Either chord, chroma, or progression must be provided.")
 
     results = _suggest_next_chords(
         idx,
@@ -97,7 +145,9 @@ def suggest_chords(
         top=top,
         weights=dict(weights) if weights is not None else None,
         goal=goal,
+        progression=prog_list,
         normalize=normalize,
+        voice_leading_addition_penalty=voice_leading_addition_penalty,
         min_notes=min_notes,
         max_notes=max_notes,
         d3_function_weights=dict(d3_function_weights) if d3_function_weights is not None else None,
@@ -118,6 +168,7 @@ def suggest_chords(
     return {
         "query": {
             "chord": chosen_chord,
+            "chroma": chroma_bits,
             "progression": prog_list,
             "key": f"{key_root} {key_mode}",
         },
