@@ -1,0 +1,7 @@
+python-rtmidi
+pychord
+sounddevice
+numpy
+librosa
+fastapi
+uvicorn[standard]
