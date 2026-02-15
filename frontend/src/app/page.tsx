@@ -35,22 +35,9 @@ export default function Home() {
     pending: null,
   });
 
-  // Live chord graph state — initialize with sample so suggestions show on load
-  const [chordGraphState, setChordGraphState] = useState<ChordGraphState | null>(() => ({
-    current: { id: "initial-current", chordId: "C" },
-    previous: [],
-    next: [
-      { id: "initial-next-0", chordId: "F", probability: 0.8 },
-      { id: "initial-next-1", chordId: "G", probability: 0.75 },
-      { id: "initial-next-2", chordId: "Am", probability: 0.85 },
-    ],
-  }));
-  const [notesMap, setNotesMap] = useState<Record<string, string[]>>(() => ({
-    C: ["C", "E", "G"],
-    F: ["F", "A", "C"],
-    G: ["G", "B", "D"],
-    Am: ["A", "C", "E"],
-  }));
+  // Live chord graph state — starts empty until user plays a chord or clicks Demo
+  const [chordGraphState, setChordGraphState] = useState<ChordGraphState | null>(null);
+  const [notesMap, setNotesMap] = useState<Record<string, string[]>>({});
 
   const prevChordGraphStateRef = useRef<ChordGraphState | null>(null);
   useEffect(() => {
@@ -571,7 +558,7 @@ export default function Home() {
 
         <div className="absolute inset-0 z-[1]" tabIndex={0} ref={playAreaRef}>
           <ChordGraph
-            state={chordGraphState || fallbackChordGraphState}
+            state={chordGraphState}
             previousState={prevChordGraphStateRef.current}
             keyboardMode={true}
             notesMap={notesMap || fallbackNotesMap}

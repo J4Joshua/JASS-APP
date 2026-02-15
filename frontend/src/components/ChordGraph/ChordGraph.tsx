@@ -5,7 +5,7 @@ import { ChordNodeComponent } from './ChordNode';
 import { ChordEdge } from './ChordEdge';
 
 interface ChordGraphProps {
-  state: ChordGraphState;
+  state: ChordGraphState | null;
   previousState?: ChordGraphState | null;
   keyboardMode?: boolean;
   notesMap?: Record<string, string[]>; // Map chord IDs to their notes
@@ -100,6 +100,62 @@ export function ChordGraph({
   notesMap = {},
   activeNotes,
 }: ChordGraphProps) {
+  const centerPos = getAbsPos('center');
+
+  // When state is null (initial load), render the empty canvas with ambient decoration
+  if (!state) {
+    return (
+      <svg
+        viewBox={`0 0 ${VIEWBOX_W} ${VIEWBOX_H}`}
+        style={{
+          width: '100%',
+          height: '100%',
+          display: 'block',
+          position: 'relative',
+          zIndex: 2,
+        }}
+        preserveAspectRatio="xMidYMid meet"
+      >
+        <GlowDefs />
+        <circle cx={CENTER.x} cy={CENTER.y} r={180} fill="none" stroke="rgba(200, 180, 195, 0.12)" strokeWidth={0.5} />
+        <circle cx={CENTER.x} cy={CENTER.y} r={320} fill="none" stroke="rgba(200, 180, 195, 0.07)" strokeWidth={0.5} strokeDasharray="4 12" />
+
+        {/* Giant bobbling "play any chord" text */}
+        <text
+          x={CENTER.x}
+          y={CENTER.y + 80}
+          fill="#e8789a"
+          fontSize={96}
+          fontWeight={400}
+          fontFamily="var(--font-patrick-hand), 'Patrick Hand', cursive"
+          textAnchor="middle"
+          dominantBaseline="middle"
+          style={{ filter: 'drop-shadow(0 0 24px rgba(232, 120, 154, 0.35))' }}
+        >
+          play any chord
+          <animate
+            attributeName="y"
+            values={`${CENTER.y + 80};${CENTER.y + 62};${CENTER.y + 80}`}
+            dur="2.4s"
+            repeatCount="indefinite"
+            calcMode="spline"
+            keySplines="0.45 0 0.55 1;0.45 0 0.55 1"
+          />
+          <animate
+            attributeName="opacity"
+            values="0.85;1;0.85"
+            dur="2.4s"
+            repeatCount="indefinite"
+            calcMode="spline"
+            keySplines="0.45 0 0.55 1;0.45 0 0.55 1"
+          />
+        </text>
+
+        <AmbientParticles />
+      </svg>
+    );
+  }
+
   const { current, previous, next } = state;
 
   // When a suggestion is played, it becomes current — find which slot it came from for slide-up animation
@@ -109,7 +165,6 @@ export function ChordGraph({
     previousState.next.some((n) => n.chordId === current.chordId)
       ? previousState.next.findIndex((n) => n.chordId === current.chordId)
       : -1;
-  const centerPos = getAbsPos('center');
   const promotedInitialPosition =
     promotedFrom >= 0 ? getAbsPos(`next-${promotedFrom}` as SlotId) : undefined;
 
