@@ -201,7 +201,7 @@ function ChordNodeComponentInner({
 
   return (
     <motion.g
-      style={{ willChange: hasMotion ? 'transform' : undefined }}
+      style={{ willChange: hasMotion ? 'transform' : undefined, transformOrigin: 'center center' }}
       initial={
         isSlidingUp && fromPos
           ? { x: fromPos.x, y: fromPos.y, opacity: 1, scale: targetScale }
@@ -214,18 +214,21 @@ function ChordNodeComponentInner({
       animate={{ x, y, opacity, scale: targetScale }}
       exit={{ x, y, opacity: 0, scale: 0.98 }}
       transition={{
-        duration: isSlidingUp ? 0.4 : isDemoting ? 0.35 : isShifting ? 0.32 : 0.22,
+        type: 'tween',
+        duration: isSlidingUp ? 0.5 : isDemoting ? 0.4 : isShifting ? 0.4 : 0.22,
         ease: isSlidingUp ? [0.22, 0.61, 0.36, 1] : isDemoting ? [0.25, 0.46, 0.45, 0.94] : isShifting ? [0.32, 0.72, 0.38, 1] : [0.4, 0, 0.2, 1],
       }}
     >
         <g>
-          <animateTransform
-            attributeName="transform"
-            type="translate"
-            values={`0,0; 0,${-config.floatY}; 0,0; 0,${config.floatY * 0.4}; 0,0`}
-            dur={`${config.floatDuration}s`}
-            repeatCount="indefinite"
-          />
+          {!hasMotion && (
+            <animateTransform
+              attributeName="transform"
+              type="translate"
+              values={`0,0; 0,${-config.floatY}; 0,0; 0,${config.floatY * 0.4}; 0,0`}
+              dur={`${config.floatDuration}s`}
+              repeatCount="indefinite"
+            />
+          )}
 
           {/* ── Inline defs: dynamic gradients using chord colour ── */}
           <defs>

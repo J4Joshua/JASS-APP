@@ -4,8 +4,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Background } from "@/components/Background/Background";
 import { ChordGraph } from "@/components/ChordGraph/ChordGraph";
-import type { ChordGraphState } from "@/types/chord";
+import type { ChordGraphState, HistorySeed } from "@/types/chord";
 import { KEY_TO_MIDI, midiNotesToNames } from "@/utils/keyboardToMidi";
+
+const HISTORY_SEED_KEY = "historySeed";
 
 type ChordMsg = {
   type: "chord";
@@ -15,6 +17,7 @@ type ChordMsg = {
 
 export default function Home() {
   const [status, setStatus] = useState<"disconnected" | "connecting" | "connected">("disconnected");
+  const [historyBannerChord, setHistoryBannerChord] = useState<string | null>(null);
   const [chord, setChord] = useState<ChordMsg["chord"] | null>(null);
   const [lastChord, setLastChord] = useState<ChordMsg["chord"] | null>(null);
   const [suggestions, setSuggestions] = useState<ChordMsg["suggestions"]>([]);
@@ -27,6 +30,10 @@ export default function Home() {
   const [keyboardHeldNotes, setKeyboardHeldNotes] = useState<Set<number>>(new Set());
   /** Live notes from physical piano (backend MIDI) - for real-time visual feedback */
   const [livePianoNotes, setLivePianoNotes] = useState<string[] | null>(null);
+  const liveNotesThrottleRef = useRef<{ timer: ReturnType<typeof setTimeout> | null; pending: string[] | null }>({
+    timer: null,
+    pending: null,
+  });
 
   // Live chord graph state — initialize with sample so suggestions show on load
   const [chordGraphState, setChordGraphState] = useState<ChordGraphState | null>(() => ({
@@ -49,6 +56,28 @@ export default function Home() {
   useEffect(() => {
     prevChordGraphStateRef.current = chordGraphState;
   });
+
+  // Hydrate from history seed when navigating from History page ("play from here")
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(HISTORY_SEED_KEY);
+      if (!raw) return;
+      const seed: HistorySeed = JSON.parse(raw);
+      sessionStorage.removeItem(HISTORY_SEED_KEY);
+      setChordGraphState({
+        current: seed.current,
+        previous: seed.previous ?? [],
+        next: seed.next,
+      });
+      setNotesMap(seed.notesMap);
+      setHistoryBannerChord(seed.current.chordId);
+      demoModeRef.current = false; // Allow WebSocket to take over when user plays
+      const t = setTimeout(() => setHistoryBannerChord(null), 3000);
+      return () => clearTimeout(t);
+    } catch {
+      // Ignore parse errors or missing key
+    }
+  }, []);
 
   // Transform WebSocket data to ChordGraphState format
   function transformToChordGraphState(chordMsg: ChordMsg): ChordGraphState | null {
@@ -125,7 +154,19 @@ export default function Home() {
         console.log("📦 Parsed data:", data);
 
         if (data.type === "live_notes") {
-          setLivePianoNotes(data.notes);
+          const notes = data.notes as string[];
+          const throttle = liveNotesThrottleRef.current;
+          throttle.pending = notes;
+          if (throttle.timer === null) {
+            setLivePianoNotes(notes);
+            throttle.timer = setTimeout(() => {
+              if (throttle.pending !== null) {
+                setLivePianoNotes(throttle.pending);
+                throttle.pending = null;
+              }
+              throttle.timer = null;
+            }, 50);
+          }
           return;
         }
 
@@ -180,6 +221,10 @@ export default function Home() {
     ws.onclose = () => {
       setStatus("disconnected");
       setLivePianoNotes(null);
+      const t = liveNotesThrottleRef.current;
+      if (t.timer) clearTimeout(t.timer);
+      t.timer = null;
+      t.pending = null;
       addLog("Disconnected");
     };
 
@@ -509,6 +554,20 @@ export default function Home() {
             Demo
           </button>
         </div>
+
+        {historyBannerChord && (
+          <div
+            className="absolute top-16 left-1/2 -translate-x-1/2 z-20 px-4 py-2 rounded-lg text-sm font-medium"
+            style={{
+              background: 'linear-gradient(145deg, rgba(248, 244, 252, 0.95) 0%, rgba(236, 228, 248, 0.9) 100%)',
+              border: '1px solid rgba(196, 184, 208, 0.6)',
+              color: '#5c4a6c',
+              boxShadow: '0 4px 12px rgba(168, 140, 200, 0.2)',
+            }}
+          >
+            Playing from {historyBannerChord} in session
+          </div>
+        )}
 
         <div className="absolute inset-0 z-[1]" tabIndex={0} ref={playAreaRef}>
           <ChordGraph
