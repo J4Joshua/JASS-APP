@@ -126,5 +126,7 @@ def function_prototypes(root: str, mode: str = "major") -> dict[str, np.ndarray]
     for name, deg in degrees.items():
         pc = (root_idx + deg) % 12
         quality = triad_map[deg]
+        # print(triad_chroma(pc, quality))
+        # this is correct, gives major tonal, subdominant, and dominant.
         out[name] = chroma_bits_to_tis(triad_chroma(pc, quality))
     return out

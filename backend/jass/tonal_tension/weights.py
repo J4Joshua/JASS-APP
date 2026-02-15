@@ -5,14 +5,10 @@ PAPER_WEIGHTS_TABLE1: dict[str, float] = {
     # From Table 1 (Experiment 1): statistically significant indicators.
     # Tonal distance (from the key) -> d2
     # Dissonance -> c
-    # Voice Leading -> m
-    # Hierarchical Tension -> h
-    "d1": 0.0,
-    "d2": 0.158,
-    "d3": 0.0,
-    "c": 0.303,
-    "m": 0.271,
-    "h": 0.318,
+    "d1": 0.0001,
+    "d2": 0.0001,
+    "d3": 0.0001,
+    "c": 1,
 }
 
 
@@ -23,5 +19,5 @@ def normalize_weights(weights: dict[str, float]) -> dict[str, float]:
     return {k: float(v) / total for k, v in weights.items()}
 
 
-DEFAULT_WEIGHTS: dict[str, float] = normalize_weights(PAPER_WEIGHTS_TABLE1)
-
+DEFAULT_WEIGHTS: dict[str, float] = dict(PAPER_WEIGHTS_TABLE1)
+DEFAULT_WEIGHTS_NORMALIZED: dict[str, float] = normalize_weights(PAPER_WEIGHTS_TABLE1)
