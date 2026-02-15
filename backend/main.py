@@ -11,9 +11,12 @@ import json
 import os
 import sys
 import threading
+import uuid
+from dataclasses import dataclass, asdict
 from pathlib import Path
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
 # Ensure backend/ is on sys.path so jass package resolves
@@ -26,6 +29,32 @@ from jass.chord_suggestion import suggest_chords
 
 app = FastAPI()
 
+# --- CORS Configuration ---
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allow all origins for development
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# --- Graph Data Structures ---
+
+@dataclass
+class Node:
+    """Represents a chord node in the graph."""
+    uuid: str
+    name: str
+    depth: int
+    chroma: list[int]
+
+@dataclass
+class Relation:
+    """Represents a directed edge from one chord to another."""
+    uuid: str
+    source_node: str
+    target_node: str
+
 NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
 
 # --- Global state ---
@@ -33,6 +62,12 @@ clients: set[WebSocket] = set()
 loop: asyncio.AbstractEventLoop | None = None
 tis_idx: TISIndex | None = None
 queue: asyncio.Queue[frozenset[int]] = asyncio.Queue()
+
+# Graph tracking state
+last_chord_name: str | None = None
+graph_depth: int = 0
+nodes: list[Node] = []
+relations: list[Relation] = []
 
 
 # --- Stage 1: MIDI capture (rtmidi thread) ---
@@ -79,6 +114,8 @@ class MidiCapture:
 
 async def chord_worker():
     """Reads note snapshots from the queue, detects chords, broadcasts."""
+    global last_chord_name, graph_depth, nodes, relations
+
     from pychord.analyzer import find_chords_from_notes
 
     while True:
@@ -100,16 +137,51 @@ async def chord_worker():
             if chords:
                 chord_name = str(chords[0])
 
-        # Only pass chroma when pychord didn't detect a name, so the index
-        # resolves by canonical chord name rather than raw MIDI bits.
+        # Get suggestions
         suggestions = await asyncio.to_thread(
             _get_suggestions, chord_name, chroma if chord_name is None else None
         )
+
+        # Check if chord changed and update graph
+        if chord_name != last_chord_name and chord_name is not None:
+            last_chord_name = chord_name
+            graph_depth += 1
+            
+            # Create node for current chord
+            current_node = Node(
+                uuid=str(uuid.uuid4()),
+                name=chord_name,
+                depth=graph_depth,
+                chroma=chroma
+            )
+            nodes.append(current_node)
+            
+            # Create nodes for suggestions and relations
+            for sugg in suggestions:
+                sugg_node = Node(
+                    uuid=str(uuid.uuid4()),
+                    name=sugg["name"],
+                    depth=graph_depth + 1,
+                    chroma=sugg["chroma"]
+                )
+                nodes.append(sugg_node)
+                
+                # Create relation from current to suggestion
+                relation = Relation(
+                    uuid=str(uuid.uuid4()),
+                    source_node=current_node.uuid,
+                    target_node=sugg_node.uuid
+                )
+                relations.append(relation)
 
         await broadcast({
             "type": "chord",
             "chord": {"name": chord_name, "notes": names, "chroma": chroma},
             "suggestions": suggestions,
+            "graph": {
+                "nodes": [asdict(n) for n in nodes],
+                "relations": [asdict(r) for r in relations],
+            },
         })
 
 
@@ -151,6 +223,97 @@ async def broadcast(message: dict):
         if isinstance(result, Exception):
             clients.discard(ws)
 
+
+# --- Session Management ---
+
+def save_session() -> dict:
+    """Save current session to a JSON file and return the session data."""
+    from datetime import datetime
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    
+    session_data = {
+        "timestamp": timestamp,
+        "nodes": [asdict(n) for n in nodes],
+        "relations": [asdict(r) for r in relations],
+        "total_depth": graph_depth,
+    }
+    
+    # Create sessions directory if it doesn't exist
+    sessions_dir = Path(__file__).resolve().parent / "sessions"
+    sessions_dir.mkdir(exist_ok=True)
+    
+    # Save to file with timestamp
+    session_file = sessions_dir / f"session_{timestamp}.json"
+    
+    with open(session_file, "w") as f:
+        json.dump(session_data, f, indent=2)
+    
+    print(f"[ws] Session saved to {session_file}", file=sys.stderr)
+    return session_data
+
+def reset_session():
+    """Reset global state for a new session."""
+    global last_chord_name, graph_depth, nodes, relations
+    last_chord_name = None
+    graph_depth = 0
+    nodes = []
+    relations = []
+    print(f"[ws] Session reset", file=sys.stderr)
+
+
+@app.get("/sessions")
+async def list_sessions():
+    """List all available session files."""
+    sessions_dir = Path(__file__).resolve().parent / "sessions"
+    if not sessions_dir.exists():
+        return {"sessions": []}
+    
+    sessions = []
+    for session_file in sorted(sessions_dir.glob("session_*.json"), reverse=True):
+        try:
+            with open(session_file, "r") as f:
+                data = json.load(f)
+            sessions.append({
+                "filename": session_file.name,
+                "timestamp": data.get("timestamp"),
+                "total_depth": data.get("total_depth", 0),
+                "node_count": len(data.get("nodes", [])),
+            })
+        except Exception as e:
+            print(f"[ws] Error reading session {session_file}: {e}", file=sys.stderr)
+    
+    return {"sessions": sessions}
+
+@app.get("/sessions/{filename}")
+async def get_session(filename: str):
+    """Load a specific session file."""
+    session_file = Path(__file__).resolve().parent / "sessions" / filename
+    
+    # Security: only allow session_*.json files
+    if not filename.startswith("session_") or not filename.endswith(".json"):
+        return {"error": "Invalid filename"}
+    
+    if not session_file.exists():
+        return {"error": "Session not found"}
+    
+    try:
+        with open(session_file, "r") as f:
+            data = json.load(f)
+        return data
+    except Exception as e:
+        print(f"[ws] Error reading session {filename}: {e}", file=sys.stderr)
+        return {"error": "Failed to read session"}
+
+@app.post("/end-session")
+async def end_session():
+    """End the current session, save it, and reset state."""
+    session_data = save_session()
+    reset_session()
+    return {
+        "status": "session_ended",
+        "message": "Session saved and reset",
+        "session": session_data,
+    }
 
 @app.websocket("/ws")
 async def ws_endpoint(ws: WebSocket):

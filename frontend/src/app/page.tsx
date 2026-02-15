@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import ChordKeyboard from "@/components/ChordKeyboard";
 
 type ChordMsg = {
@@ -75,6 +76,21 @@ export default function Home() {
     wsRef.current?.close();
   }
 
+  const endSession = async () => {
+    try {
+      const response = await fetch("http://localhost:8000/end-session", {
+        method: "POST",
+      });
+      const data = await response.json();
+      if (data.status === "session_ended") {
+        addLog("Session saved and reset");
+      }
+    } catch (err) {
+      console.error("Failed to end session:", err);
+      addLog("Error ending session");
+    }
+  };
+
   useEffect(() => {
     if (logRef.current) {
       logRef.current.scrollTop = logRef.current.scrollHeight;
@@ -90,7 +106,12 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 p-8 font-[family-name:var(--font-geist-mono)]">
-      <h1 className="text-2xl font-bold mb-6">JASS - MIDI WebSocket Test</h1>
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl font-bold">JASS - MIDI WebSocket Test</h1>
+        <Link href="/history" className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded transition text-sm">
+          View History →
+        </Link>
+      </div>
 
       {/* Connection */}
       <div className="flex items-center gap-4 mb-8">
@@ -105,6 +126,9 @@ export default function Home() {
             Disconnect
           </button>
         )}
+        <button onClick={endSession} className="px-4 py-1.5 bg-emerald-600 rounded hover:bg-emerald-700 text-sm">
+          End Session
+        </button>
       </div>
 
       {/* Current Chord */}
