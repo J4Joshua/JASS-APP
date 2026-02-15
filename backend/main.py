@@ -57,6 +57,11 @@ class Relation:
 
 NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
 
+# Custom note-set → chord name overrides (checked before pychord)
+CHORD_OVERRIDES: dict[frozenset[str], str] = {
+    frozenset({"C", "D", "F"}): "F5/D",
+}
+
 # --- Global state ---
 clients: set[WebSocket] = set()
 loop: asyncio.AbstractEventLoop | None = None
@@ -68,6 +73,7 @@ last_chord_name: str | None = None
 graph_depth: int = 0
 nodes: list[Node] = []
 relations: list[Relation] = []
+allowed_suggestions: set[str] = set()
 
 
 # --- Stage 1: MIDI capture (rtmidi thread) ---
@@ -114,11 +120,12 @@ class MidiCapture:
 
 async def chord_worker():
     """Reads note snapshots from the queue, detects chords, broadcasts."""
-    global last_chord_name, graph_depth, nodes, relations
+    global last_chord_name, graph_depth, nodes, relations, allowed_suggestions
 
     from pychord.analyzer import find_chords_from_notes
 
     while True:
+      try:
         snapshot = await queue.get()
 
         # drain to latest — skip stale intermediate states
@@ -130,32 +137,53 @@ async def chord_worker():
         chroma = [1 if i in pitch_classes else 0 for i in range(12)]
         names = [NOTE_NAMES[pc] for pc in sorted(pitch_classes)]
 
-        # detect chord
-        chord_name = None
-        if len(names) >= 2:
+        # detect chord (check overrides first, then pychord)
+        chord_name = CHORD_OVERRIDES.get(frozenset(names))
+        if chord_name is None and len(names) >= 2:
             chords = find_chords_from_notes(names)
             if chords:
                 chord_name = str(chords[0])
 
-        # Get suggestions
+        print(f"[chord_worker] detected: {chord_name!r}  notes: {names}", file=sys.stderr)
+
+        # Gate: ignore unrecognized input
+        if chord_name is None:
+            print(f"[chord_worker] skipped: no chord recognized", file=sys.stderr)
+            continue
+
+        # Gate: if we have suggestions, only accept matching chords
+        root_name = chord_name.split("/")[0]
+        if allowed_suggestions and root_name not in allowed_suggestions:
+            print(f"[chord_worker] REJECTED {chord_name!r} (root={root_name!r}) — not in allowed {allowed_suggestions}", file=sys.stderr)
+            continue
+
+        print(f"[chord_worker] ACCEPTED {chord_name!r} (root={root_name!r})", file=sys.stderr)
+
+        # Get suggestions for accepted chord (use root name for lookup)
         suggestions = await asyncio.to_thread(
-            _get_suggestions, chord_name, chroma if chord_name is None else None
+            _get_suggestions, root_name, None
         )
 
+        print(f"[chord_worker] suggestions: {[s['name'] for s in suggestions]}", file=sys.stderr)
+
+        # Update allowed suggestions for next chord
+        allowed_suggestions = {s["name"] for s in suggestions}
+        print(f"[chord_worker] allowed_suggestions now: {allowed_suggestions}", file=sys.stderr)
+
         # Check if chord changed and update graph
-        if chord_name != last_chord_name and chord_name is not None:
-            last_chord_name = chord_name
+        if root_name != last_chord_name:
+            last_chord_name = root_name
             graph_depth += 1
-            
+
             # Create node for current chord
             current_node = Node(
                 uuid=str(uuid.uuid4()),
-                name=chord_name,
+                name=root_name,
                 depth=graph_depth,
                 chroma=chroma
             )
             nodes.append(current_node)
-            
+
             # Create nodes for suggestions and relations
             for sugg in suggestions:
                 sugg_node = Node(
@@ -165,7 +193,7 @@ async def chord_worker():
                     chroma=sugg["chroma"]
                 )
                 nodes.append(sugg_node)
-                
+
                 # Create relation from current to suggestion
                 relation = Relation(
                     uuid=str(uuid.uuid4()),
@@ -176,17 +204,21 @@ async def chord_worker():
 
         await broadcast({
             "type": "chord",
-            "chord": {"name": chord_name, "notes": names, "chroma": chroma},
+            "chord": {"name": root_name, "notes": names, "chroma": chroma},
             "suggestions": suggestions,
             "graph": {
                 "nodes": [asdict(n) for n in nodes],
                 "relations": [asdict(r) for r in relations],
             },
         })
+      except Exception as e:
+        import traceback
+        print(f"[chord_worker] ERROR: {e}", file=sys.stderr)
+        traceback.print_exc(file=sys.stderr)
 
 
-def _get_suggestions(chord_name: str | None, chroma: list[int]) -> list[dict]:
-    if tis_idx is None or (not chord_name and not any(chroma)):
+def _get_suggestions(chord_name: str, chroma: list[int] | None = None) -> list[dict]:
+    if tis_idx is None:
         return []
     try:
         result = suggest_chords(chord=chord_name, key="C", index=tis_idx, top=3, goal="resolve")
@@ -253,11 +285,12 @@ def save_session() -> dict:
 
 def reset_session():
     """Reset global state for a new session."""
-    global last_chord_name, graph_depth, nodes, relations
+    global last_chord_name, graph_depth, nodes, relations, allowed_suggestions
     last_chord_name = None
     graph_depth = 0
     nodes = []
     relations = []
+    allowed_suggestions = set()
     print(f"[ws] Session reset", file=sys.stderr)
 
 
