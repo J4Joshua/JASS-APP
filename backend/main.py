@@ -271,6 +271,19 @@ def reset_session():
     print(f"[ws] Session reset", file=sys.stderr)
 
 
+@app.get("/status")
+async def get_status():
+    """Check the status of the backend and available services."""
+    return {
+        "status": "online",
+        "services": {
+            "tis_index": "available" if tis_idx is not None else "unavailable",
+            "spotify": "available" if spotify_client is not None else "unavailable",
+            "midi": "disabled" if os.environ.get("DISABLE_MIDI") in ("1", "true") else "enabled",
+        }
+    }
+
+
 @app.get("/sessions")
 async def list_sessions():
     """List all available session files."""
@@ -363,9 +376,16 @@ async def recommend_songs(filename: str):
         print(f"[recommend_songs] Chord progression: {chord_progression}", file=sys.stderr)
         
         # Call Perplexity API
+        # from perplexityai import Perplexity
+
         client = Perplexity(api_key=os.environ.get("PERPLEXITY_API_KEY"))
-        
-        prompt = f"Retrieve 5 songs that have similar chord progressions to {chord_progression}. Return just the song titles and artists, one per line."
+
+        prompt = (
+            "Return EXACTLY 5 lines. Each line must be in the format: "
+            "Song Title - Artist Name. Do not include numbering, bullets, quotes, "
+            "citations, commentary, or extra text.\n"
+            f"Chord progression: {chord_progression}"
+        )
         
         completion = client.chat.completions.create(
             model="sonar-pro",
@@ -377,38 +397,63 @@ async def recommend_songs(filename: str):
         response_text = completion.choices[0].message.content
         
         # Parse the response into a list of songs
-        # Response format: Song Title - Artist\n♪\nExplanation...
+        # Expected format: "Song Title - Artist Name"
         song_titles = []
         lines = response_text.split("\n")
-        
-        for line in lines:
-            line = line.strip()
-            # Skip empty lines, separator lines (♪), citations, and explanations
-            if not line or line == "♪" or line.startswith("[") or line.startswith("Uses") or line.startswith("Employs") or line.startswith("Features"):
+
+        for raw_line in lines:
+            line = raw_line.strip()
+            if not line:
                 continue
-            # Remove markdown formatting
             line = line.replace("**", "").strip()
-            # Look for lines with dash (likely song title - artist format)
-            if " - " in line and len(line) > 5 and not line.startswith(("The ", "This ", "A ")):
+            # Remove leading numbering or bullets if present
+            line = line.lstrip("0123456789.-) ").strip()
+            if " - " in line and len(line) > 5:
                 song_titles.append(line)
-        
-        # Deduplicate
-        song_titles = list(dict.fromkeys(song_titles))[:5]  # Keep only first 5
-        
+
+        # Retry once with a stricter prompt if formatting is off
+        if len(song_titles) < 5:
+            retry_prompt = (
+                "Output ONLY 5 lines. Each line: Song Title - Artist Name. "
+                "No other text. No bullets. No numbering.\n"
+                f"Chord progression: {chord_progression}"
+            )
+            retry = client.chat.completions.create(
+                model="sonar-pro",
+                messages=[{"role": "user", "content": retry_prompt}],
+            )
+            retry_text = retry.choices[0].message.content
+            retry_lines = retry_text.split("\n")
+            song_titles = []
+            for raw_line in retry_lines:
+                line = raw_line.strip()
+                if not line:
+                    continue
+                line = line.replace("**", "").strip()
+                line = line.lstrip("0123456789.-) ").strip()
+                if " - " in line and len(line) > 5:
+                    song_titles.append(line)
+
+        # Limit to 5 songs
+        song_titles = song_titles[:5]
+
         print(f"[recommend_songs] Parsed {len(song_titles)} songs from Perplexity: {song_titles}", file=sys.stderr)
         
         # Enrich with Spotify data
         enriched_songs = []
         if spotify_client:
+            print(f"[recommend_songs] Spotify client available, searching for {len(song_titles)} songs", file=sys.stderr)
             for song_title in song_titles:
                 try:
+                    print(f"[recommend_songs] Searching Spotify for: {song_title}", file=sys.stderr)
                     # Search Spotify for the song
                     results = await asyncio.to_thread(
                         spotify_client.search, q=song_title, type="track", limit=1
                     )
                     
-                    if results and results["tracks"]["items"]:
+                    if results and results.get("tracks", {}).get("items"):
                         track = results["tracks"]["items"][0]
+                        print(f"[recommend_songs] Found: {track.get('name')} by {', '.join([a['name'] for a in track.get('artists', [])])}", file=sys.stderr)
                         
                         # Extract relevant data
                         album_art = None
@@ -429,6 +474,7 @@ async def recommend_songs(filename: str):
                             "original_query": song_title,
                         })
                     else:
+                        print(f"[recommend_songs] Not found on Spotify: {song_title}", file=sys.stderr)
                         # Fallback if not found on Spotify
                         enriched_songs.append({
                             "title": song_title,
@@ -449,6 +495,7 @@ async def recommend_songs(filename: str):
                         "original_query": song_title,
                     })
         else:
+            print(f"[recommend_songs] Spotify client not available", file=sys.stderr)
             # No Spotify client, return basic info
             enriched_songs = [
                 {
