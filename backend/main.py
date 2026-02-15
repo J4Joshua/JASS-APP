@@ -811,6 +811,11 @@ async def ws_endpoint(ws: WebSocket):
                     if difficulty in DIFFICULTY_WEIGHTS:
                         current_difficulty = difficulty
                         print(f"[ws] Difficulty set to: {difficulty}", file=sys.stderr)
+                elif msg.get("type") == "notes":
+                    notes = msg.get("notes", [])
+                    if notes:
+                        queue.put_nowait(frozenset(notes))
+                        print(f"[ws] notes injected: {notes}", file=sys.stderr)
             except (json.JSONDecodeError, AttributeError):
                 pass
     except WebSocketDisconnect:
