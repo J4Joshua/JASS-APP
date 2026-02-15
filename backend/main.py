@@ -133,26 +133,26 @@ async def chord_worker():
         chroma_key = tuple(chroma)
         names = [NOTE_NAMES[pc] for pc in sorted(pitch_classes)]
 
-        # chord_name: str | None = None
-        # if len(names) >= 2:
-        #     chords = find_chords_from_notes(names)
-        #     if chords:
-        #         chord_name = str(chords[0])
-        # if chord_name is None:
-        #     chord_name = "-".join(names) if names else "?"
+        chord_name: str | None = None
+        if len(names) >= 2:
+            chords = find_chords_from_notes(names)
+            if chords:
+                chord_name = str(chords[0])
+        if chord_name is None:
+            chord_name = "-".join(names) if names else "?"
 
-        # print(f"[chord_worker] detected: {chord_name!r}  notes: {names}  chroma={list(chroma_key)}", file=sys.stderr)
+        print(f"[chord_worker] detected: {chord_name!r}  notes: {names}  chroma={list(chroma_key)}", file=sys.stderr)
 
-        # # Gate: if we have suggestions, only accept chords whose chroma matches
-        # if allowed_suggestions and chroma_key not in allowed_suggestions:
-        #     print(f"[chord_worker] REJECTED {chord_name!r}  played={list(chroma_key)}  allowed={[list(c) for c in allowed_suggestions]}", file=sys.stderr)
-        #     continue
+        # Gate: if we have suggestions, only accept chords whose chroma matches
+        if allowed_suggestions and chroma_key not in allowed_suggestions:
+            print(f"[chord_worker] REJECTED {chord_name!r}  played={list(chroma_key)}  allowed={[list(c) for c in allowed_suggestions]}", file=sys.stderr)
+            continue
 
-        # print(f"[chord_worker] ACCEPTED {chord_name!r}  chroma={list(chroma_key)}", file=sys.stderr)
+        print(f"[chord_worker] ACCEPTED {chord_name!r}  chroma={list(chroma_key)}", file=sys.stderr)
 
         # Get suggestions for accepted chord
         suggestions = await asyncio.to_thread(
-            _get_suggestions, chroma
+            _get_suggestions, chord_name, chroma
         )
 
         print(f"[chord_worker] suggestions: {[s['name'] for s in suggestions]}", file=sys.stderr)
@@ -206,29 +206,59 @@ async def chord_worker():
         print(f"[chord_worker] ERROR: {e}", file=sys.stderr)
         traceback.print_exc(file=sys.stderr)
 
-
 def _get_suggestions(chord_name: str, chroma: list[int] | None = None) -> list[dict]:
     if tis_idx is None:
         return []
+
+    # Pick whatever 3 goals you want to compare.
+    # Commonly useful set: resolve (low tension), build (high tension), and a numeric target.
+    goals = ["resolve", "tension", 0.3]  # <- change "0.5" to whatever target you want
+
+    out: list[dict] = []
     try:
-        result = suggest_chords(chroma=chroma, key="C", index=tis_idx, top=3, goal="resolve")
-        out = []
-        for r in result.get("results", []):
+        for goal in goals:
+            result = suggest_chords(
+                chroma=chroma,
+                key="C",
+                index=tis_idx,
+                top=1,          # top 1 per goal
+                goal=goal,      # different goal each call
+            )
+
+            # Ensure we always append *one* item per goal to keep iterable length == 3
+            rlist = result.get("results", []) or []
+            if not rlist:
+                out.append({
+                    "name": None,
+                    "notes": [],
+                    "chroma": [],
+                    "tension": 0.0,
+                    "goal": goal,
+                })
+                continue
+
+            r = rlist[0]
             row = int(r["row"])
             bits = tis_idx.chroma_bits[row].tolist()
+
             notes = [n.capitalize() for n in r.get("notes", [])]
             if not notes:
                 notes = [NOTE_NAMES[i] for i, b in enumerate(bits) if b]
+
             out.append({
                 "name": r["name"],
                 "notes": notes,
                 "chroma": bits,
                 "tension": round(float(r.get("tension", 0)), 3),
+                "goal": goal,  # include which goal produced this suggestion
             })
+
         return out
+
     except Exception as e:
         print(f"[ws] suggest error: chord={chord_name!r} chroma={chroma} → {e}", file=sys.stderr)
         return []
+
 
 
 # --- Stage 3: WebSocket broadcast ---
