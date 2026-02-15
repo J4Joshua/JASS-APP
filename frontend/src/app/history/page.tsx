@@ -55,6 +55,15 @@ type ChordMsg = {
   suggestions: { name: string; notes: string[]; chroma: number[]; tension: number }[];
 };
 
+type Song = {
+  title: string;
+  artists: string;
+  album: string;
+  image_url: string | null;
+  spotify_url: string | null;
+  original_query: string;
+};
+
 export default function History() {
   const router = useRouter();
   const [status, setStatus] = useState<"disconnected" | "connecting" | "connected">("disconnected");
@@ -62,6 +71,10 @@ export default function History() {
   const [isRecording, setIsRecording] = useState(false);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [selectedSession, setSelectedSession] = useState<SessionData | null>(null);
+  const [recommendedSongs, setRecommendedSongs] = useState<Song[]>([]);
+  const [isLoadingSongs, setIsLoadingSongs] = useState(false);
+  const [songsError, setSongsError] = useState<string | null>(null);
+  const [chordProgression, setChordProgression] = useState<string | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
@@ -83,8 +96,43 @@ export default function History() {
       const response = await fetch(`http://localhost:8000/sessions/${filename}`);
       const data: SessionData = await response.json();
       setSelectedSession(data);
+      setRecommendedSongs([]);
+      setSongsError(null);
+      setChordProgression(null);
     } catch (err) {
       console.error("Failed to load session:", err);
+    }
+  }
+
+  async function fetchRecommendedSongs() {
+    if (!selectedSession) return;
+    
+    // Find the filename from the selected session timestamp
+    const sessionFile = sessions.find(s => s.timestamp === selectedSession.timestamp);
+    if (!sessionFile) {
+      setSongsError("Could not find session file");
+      return;
+    }
+
+    setIsLoadingSongs(true);
+    setSongsError(null);
+    setRecommendedSongs([]);
+
+    try {
+      const response = await fetch(`http://localhost:8000/recommend-songs/${sessionFile.filename}`);
+      const data = await response.json();
+
+      if (data.error) {
+        setSongsError(data.error);
+      } else {
+        setRecommendedSongs(data.songs || []);
+        setChordProgression(data.chord_progression);
+      }
+    } catch (err) {
+      setSongsError(err instanceof Error ? err.message : "Failed to fetch recommendations");
+      console.error("Failed to fetch recommendations:", err);
+    } finally {
+      setIsLoadingSongs(false);
     }
   }
 
@@ -372,6 +420,94 @@ export default function History() {
         <div className="lg:col-span-3">
           {selectedSession ? (
             <div className="space-y-4">
+              {/* Song Recommendations */}
+              <div className="rounded-xl p-4" style={cardStyle}>
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="text-xs uppercase tracking-wide" style={{ color: "#7c6c8c" }}>Similar Songs</h3>
+                    <p className="text-xs mt-1" style={{ color: "#9c8ca8" }}>Powered by Perplexity & Spotify</p>
+                  </div>
+                  <button
+                    onClick={fetchRecommendedSongs}
+                    disabled={isLoadingSongs}
+                    className="px-3 py-1 rounded-lg text-xs font-medium text-white transition-all hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed"
+                    style={{
+                      background: "linear-gradient(160deg, #9080d8 0%, #7868c0 100%)",
+                      boxShadow: "0 2px 8px rgba(120, 104, 192, 0.35), inset 0 1px 0 rgba(255,255,255,0.2)",
+                    }}
+                  >
+                    {isLoadingSongs ? "Loading..." : "Get Recommendations"}
+                  </button>
+                </div>
+
+                {chordProgression && (
+                  <p className="text-xs mb-3" style={{ color: "#5c4a6c" }}>
+                    <span style={{ color: "#7c6c8c" }}>Progression:</span> {chordProgression}
+                  </p>
+                )}
+
+                {songsError && (
+                  <p className="text-xs mb-3 text-red-500">{songsError}</p>
+                )}
+
+                {recommendedSongs.length > 0 ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {recommendedSongs.map((song, idx) => (
+                      <div
+                        key={idx}
+                        className="rounded-lg p-3 cursor-pointer transition-all hover:shadow-md"
+                        style={{
+                          background: "rgba(220, 212, 232, 0.3)",
+                          border: "1px solid rgba(196, 184, 208, 0.3)",
+                        }}
+                        onClick={() => song.spotify_url && window.open(song.spotify_url, "_blank")}
+                      >
+                        <div className="flex flex-col gap-2">
+                          {song.image_url ? (
+                            <img
+                              src={song.image_url}
+                              alt={song.title}
+                              className="w-full h-32 rounded object-cover"
+                            />
+                          ) : (
+                            <div
+                              className="w-full h-32 rounded flex items-center justify-center"
+                              style={{ background: "rgba(168, 140, 200, 0.2)" }}
+                            >
+                              <span style={{ color: "#9c8ca8" }}>♪</span>
+                            </div>
+                          )}
+                          <div className="min-w-0">
+                            <div className="text-sm font-medium" style={{ color: "#5c4a6c" }}>
+                              {song.title}
+                            </div>
+                            {song.artists && (
+                              <div className="text-xs mt-0.5" style={{ color: "#7c6c8c" }}>
+                                {song.artists}
+                              </div>
+                            )}
+                            {song.album && (
+                              <div className="text-xs mt-0.5 opacity-75" style={{ color: "#9c8ca8" }}>
+                                {song.album}
+                              </div>
+                            )}
+                            {song.spotify_url && (
+                              <div className="text-xs mt-1">
+                                <span style={{ color: "#7868c0" }}>▶ Open on Spotify</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : !isLoadingSongs && !songsError && !chordProgression && (
+                  <div className="text-xs" style={{ color: "#9c8ca8" }}>
+                    <p className="mb-2">Click "Get Recommendations" to find songs that use a similar progression.</p>
+                  </div>
+                )}
+              </div>
+
               {/* Graph */}
               <div className="rounded-xl p-6 overflow-auto" style={{ ...cardStyle, maxHeight: "600px" }}>
                 <svg width={(selectedSession.total_depth + 1) * 120 + 40} height={graphHeight}>
@@ -496,37 +632,6 @@ export default function History() {
                 <div className="rounded-xl p-4" style={cardStyle}>
                   <p className="text-xs mb-1" style={{ color: "#7c6c8c" }}>Total Depth</p>
                   <p className="text-xl font-bold" style={{ color: "#5c4a6c" }}>{selectedSession.total_depth}</p>
-                </div>
-              </div>
-
-              {/* Legend */}
-              <div className="rounded-xl p-4" style={cardStyle}>
-                <h3 className="text-xs mb-3 uppercase tracking-wide" style={{ color: "#7c6c8c" }}>Legend</h3>
-                <div className="grid grid-cols-2 gap-4 text-xs">
-                  <div className="flex items-center gap-2">
-                    <svg width="24" height="24">
-                      <circle cx="12" cy="12" r="8" fill="#9080d8" stroke="#a890e8" strokeWidth="2" />
-                    </svg>
-                    <span style={{ color: "#5c4a6c" }}>Played chord (has progression)</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <svg width="24" height="24">
-                      <circle cx="12" cy="12" r="8" fill="#b8a8c8" stroke="#c8b8d8" strokeWidth="1" opacity="0.7" />
-                    </svg>
-                    <span style={{ color: "#5c4a6c" }}>Suggested chord (not played)</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <svg width="24" height="24">
-                      <line x1="2" y1="12" x2="22" y2="12" stroke="#7868c0" strokeWidth="3" opacity="0.85" />
-                    </svg>
-                    <span style={{ color: "#5c4a6c" }}>Played progression</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <svg width="24" height="24">
-                      <line x1="2" y1="12" x2="22" y2="12" stroke="#a898b8" strokeWidth="1.5" opacity="0.45" />
-                    </svg>
-                    <span style={{ color: "#5c4a6c" }}>Suggested progression</span>
-                  </div>
                 </div>
               </div>
             </div>
