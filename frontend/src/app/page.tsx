@@ -43,6 +43,11 @@ export default function Home() {
     Am: ["A", "C", "E"],
   }));
 
+  const prevChordGraphStateRef = useRef<ChordGraphState | null>(null);
+  useEffect(() => {
+    prevChordGraphStateRef.current = chordGraphState;
+  });
+
   // Transform WebSocket data to ChordGraphState format
   function transformToChordGraphState(chordMsg: ChordMsg): ChordGraphState | null {
     // If no chord name, return null (no visualization)
@@ -247,6 +252,66 @@ export default function Home() {
 
   const fallbackNotesMap = { "?": [] };
 
+  // Demo mode: cycle through chord states to test animations (no keyboard/backend needed)
+  const DEMO_STATES: { state: ChordGraphState; notesMap: Record<string, string[]> }[] = [
+    {
+      state: {
+        current: { id: "d1-c", chordId: "C" },
+        previous: [],
+        next: [
+          { id: "d1-n0", chordId: "F", probability: 0.8 },
+          { id: "d1-n1", chordId: "G", probability: 0.75 },
+          { id: "d1-n2", chordId: "Am", probability: 0.85 },
+        ],
+      },
+      notesMap: { C: ["C", "E", "G"], F: ["F", "A", "C"], G: ["G", "B", "D"], Am: ["A", "C", "E"] },
+    },
+    {
+      state: {
+        current: { id: "d2-c", chordId: "F" },
+        previous: [],
+        next: [
+          { id: "d2-n0", chordId: "G", probability: 0.9 },
+          { id: "d2-n1", chordId: "Am", probability: 0.7 },
+          { id: "d2-n2", chordId: "C", probability: 0.65 },
+        ],
+      },
+      notesMap: { F: ["F", "A", "C"], G: ["G", "B", "D"], Am: ["A", "C", "E"], C: ["C", "E", "G"] },
+    },
+    {
+      state: {
+        current: { id: "d3-c", chordId: "Am" },
+        previous: [],
+        next: [
+          { id: "d3-n0", chordId: "F", probability: 0.88 },
+          { id: "d3-n1", chordId: "G", probability: 0.72 },
+          { id: "d3-n2", chordId: "Em", probability: 0.6 },
+        ],
+      },
+      notesMap: { Am: ["A", "C", "E"], F: ["F", "A", "C"], G: ["G", "B", "D"], Em: ["E", "G", "B"] },
+    },
+    {
+      state: {
+        current: { id: "d4-c", chordId: "G" },
+        previous: [],
+        next: [
+          { id: "d4-n0", chordId: "C", probability: 0.95 },
+          { id: "d4-n1", chordId: "Am", probability: 0.8 },
+          { id: "d4-n2", chordId: "D", probability: 0.5 },
+        ],
+      },
+      notesMap: { G: ["G", "B", "D"], C: ["C", "E", "G"], Am: ["A", "C", "E"], D: ["D", "F#", "A"] },
+    },
+  ];
+  const [demoIndex, setDemoIndex] = useState(0);
+  const cycleDemo = () => {
+    const nextIndex = (demoIndex + 1) % DEMO_STATES.length;
+    const next = DEMO_STATES[nextIndex];
+    setDemoIndex(nextIndex);
+    setChordGraphState(next.state);
+    setNotesMap(next.notesMap);
+  };
+
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 font-[family-name:var(--font-geist-mono)]">
       {/* Bubble Visualization - each sphere has its keyboard directly below it */}
@@ -272,11 +337,19 @@ export default function Home() {
           <button onClick={endSession} className="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 rounded text-white text-sm">
             End Session
           </button>
+          <button
+            onClick={cycleDemo}
+            className="px-3 py-1 bg-violet-600 hover:bg-violet-500 rounded text-white text-sm"
+            title="Cycle chord states to test animations (no keyboard needed)"
+          >
+            Demo
+          </button>
         </div>
 
         <div className="absolute inset-0" tabIndex={0} ref={playAreaRef}>
           <ChordGraph
             state={chordGraphState || fallbackChordGraphState}
+            previousState={prevChordGraphStateRef.current}
             showNotes={false}
             keyboardMode={true}
             notesMap={notesMap || fallbackNotesMap}
