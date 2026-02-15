@@ -19,6 +19,7 @@ type Relation = {
 };
 
 type Session = {
+  session_number: number;
   filename: string;
   timestamp: string;
   total_depth: number;
@@ -50,7 +51,6 @@ export default function History() {
   const [isRecording, setIsRecording] = useState(false);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [selectedSession, setSelectedSession] = useState<SessionData | null>(null);
-  const [depthRange, setDepthRange] = useState<[number, number]>([0, 0]);
   const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
@@ -72,7 +72,6 @@ export default function History() {
       const response = await fetch(`http://localhost:8000/sessions/${filename}`);
       const data: SessionData = await response.json();
       setSelectedSession(data);
-      setDepthRange([0, data.total_depth]);
     } catch (err) {
       console.error("Failed to load session:", err);
     }
@@ -167,21 +166,54 @@ export default function History() {
   const statusColor =
     status === "connected" ? "bg-green-500" : status === "connecting" ? "bg-yellow-500" : "bg-red-500";
 
-  // Filter nodes by depth range
-  const filteredNodes = selectedSession
-    ? selectedSession.nodes.filter((n) => n.depth >= depthRange[0] && n.depth <= depthRange[1])
-    : [];
+  // Deduplicate nodes: merge nodes with same name and depth
+  const deduplicatedNodes = selectedSession
+    ? (() => {
+        const nodesByDepthAndName = new Map<string, Node>();
+        const uuidMapping = new Map<string, string>(); // old UUID -> canonical UUID
+        
+        for (const node of selectedSession.nodes) {
+          const key = `${node.depth}:${node.name}`;
+          if (!nodesByDepthAndName.has(key)) {
+            nodesByDepthAndName.set(key, node);
+            uuidMapping.set(node.uuid, node.uuid); // First occurrence is canonical
+          } else {
+            // Map this duplicate to the canonical UUID
+            const canonical = nodesByDepthAndName.get(key)!;
+            uuidMapping.set(node.uuid, canonical.uuid);
+          }
+        }
+        
+        return {
+          nodes: Array.from(nodesByDepthAndName.values()),
+          uuidMapping
+        };
+      })()
+    : { nodes: [], uuidMapping: new Map() };
 
-  // Find edges that connect nodes within filtered depth range and have same name
-  const filteredRelations = selectedSession
-    ? selectedSession.relations.filter((rel) => {
-        const source = selectedSession.nodes.find((n) => n.uuid === rel.source_node);
-        const target = selectedSession.nodes.find((n) => n.uuid === rel.target_node);
-        if (!source || !target) return false;
-        const sourceInRange = source.depth >= depthRange[0] && source.depth <= depthRange[1];
-        const targetInRange = target.depth >= depthRange[0] && target.depth <= depthRange[1];
-        return sourceInRange && targetInRange && source.name === target.name;
-      })
+  // Calculate max nodes at any depth for dynamic height
+  const maxNodesAtDepth = deduplicatedNodes.nodes.length > 0
+    ? Math.max(
+        ...Array.from(
+          { length: (selectedSession?.total_depth || 0) + 1 },
+          (_, depth) => deduplicatedNodes.nodes.filter(n => n.depth === depth).length
+        )
+      )
+    : 0;
+  const graphHeight = Math.max(200, maxNodesAtDepth * 60 + 80); // 60px per node + padding
+
+  // Map relations to use deduplicated UUIDs
+  const dedupedRelations = selectedSession
+    ? selectedSession.relations
+        .map((rel) => ({
+          ...rel,
+          source_node: deduplicatedNodes.uuidMapping.get(rel.source_node) || rel.source_node,
+          target_node: deduplicatedNodes.uuidMapping.get(rel.target_node) || rel.target_node,
+        }))
+        // Remove duplicate edges after UUID mapping
+        .filter((rel, idx, arr) => 
+          arr.findIndex(r => r.source_node === rel.source_node && r.target_node === rel.target_node) === idx
+        )
     : [];
 
   return (
@@ -195,49 +227,7 @@ export default function History() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        {/* Left Panel: Sessions & Recording */}
         <div className="lg:col-span-1 space-y-6">
-          {/* Recording Section */}
-          <div className="bg-zinc-900 rounded-lg p-4 border border-zinc-800">
-            <h2 className="text-sm text-zinc-400 mb-3 uppercase tracking-wide">Live Recording</h2>
-            <div className="flex items-center gap-2 mb-3">
-              <span className={`w-3 h-3 rounded-full ${statusColor}`} />
-              <span className="text-sm">{status}</span>
-            </div>
-            <label className="flex items-center gap-2 cursor-pointer text-sm mb-4">
-              <input
-                type="checkbox"
-                checked={isRecording}
-                onChange={(e) => setIsRecording(e.target.checked)}
-                disabled={status !== "connected"}
-                className="cursor-pointer"
-              />
-              <span>Recording</span>
-            </label>
-            <div className="space-y-2">
-              <button
-                onClick={exportJSON}
-                disabled={chordHistory.length === 0}
-                className="w-full px-3 py-1.5 bg-blue-600 rounded hover:bg-blue-500 disabled:bg-zinc-700 disabled:cursor-not-allowed text-xs"
-              >
-                Export JSON
-              </button>
-              <button
-                onClick={clearHistory}
-                disabled={chordHistory.length === 0}
-                className="w-full px-3 py-1.5 bg-zinc-700 rounded hover:bg-zinc-600 disabled:cursor-not-allowed text-xs"
-              >
-                Clear
-              </button>
-              <button
-                onClick={endSession}
-                disabled={chordHistory.length === 0}
-                className="w-full px-3 py-1.5 bg-emerald-600 rounded hover:bg-emerald-700 disabled:bg-zinc-700 disabled:cursor-not-allowed text-xs"
-              >
-                End Session
-              </button>
-            </div>
-          </div>
 
           {/* Sessions List */}
           <div className="bg-zinc-900 rounded-lg p-4 border border-zinc-800">
@@ -257,7 +247,7 @@ export default function History() {
                         : "bg-zinc-800 hover:bg-zinc-700"
                     }`}
                   >
-                    <div className="font-mono text-xs">{session.timestamp}</div>
+                    <div className="font-bold text-sm">Session {session.session_number}</div>
                     <div className="text-zinc-400 text-xs">
                       {session.node_count} nodes • depth {session.total_depth}
                     </div>
@@ -273,18 +263,22 @@ export default function History() {
           {selectedSession ? (
             <div className="space-y-4">
               {/* Graph */}
-              <div className="bg-zinc-900 rounded-lg p-6 border border-zinc-800 overflow-auto" style={{ height: "500px" }}>
-                <svg width="100%" height="100%" style={{ minHeight: "500px" }}>
+              <div className="bg-zinc-900 rounded-lg p-6 border border-zinc-800 overflow-auto" style={{ maxHeight: "600px" }}>
+                <svg width={(selectedSession.total_depth + 1) * 120 + 40} height={graphHeight}>
                   {/* Draw edges */}
-                  {filteredRelations.map((rel) => {
-                    const source = selectedSession.nodes.find((n) => n.uuid === rel.source_node);
-                    const target = selectedSession.nodes.find((n) => n.uuid === rel.target_node);
+                  {dedupedRelations.map((rel) => {
+                    const source = deduplicatedNodes.nodes.find((n) => n.uuid === rel.source_node);
+                    const target = deduplicatedNodes.nodes.find((n) => n.uuid === rel.target_node);
                     if (!source || !target) return null;
 
+                    // Calculate positions
                     const sourceX = source.depth * 120 + 60;
                     const targetX = target.depth * 120 + 60;
-                    const sourceY = filteredNodes.filter((n) => n.depth === source.depth).indexOf(source) * 60 + 40;
-                    const targetY = filteredNodes.filter((n) => n.depth === target.depth).indexOf(target) * 60 + 40;
+                    const sourceY = deduplicatedNodes.nodes.filter((n) => n.depth === source.depth).indexOf(source) * 60 + 40;
+                    const targetY = deduplicatedNodes.nodes.filter((n) => n.depth === target.depth).indexOf(target) * 60 + 40;
+
+                    // Check if target node was actually played (has outgoing edges)
+                    const targetWasPlayed = dedupedRelations.some(r => r.source_node === target.uuid);
 
                     return (
                       <line
@@ -293,25 +287,33 @@ export default function History() {
                         y1={sourceY}
                         x2={targetX}
                         y2={targetY}
-                        stroke="#666"
-                        strokeWidth="2"
-                        markerEnd="url(#arrowhead)"
+                        stroke={targetWasPlayed ? "#3b82f6" : "#666"}
+                        strokeWidth={targetWasPlayed ? "3" : "1.5"}
+                        opacity={targetWasPlayed ? "0.8" : "0.4"}
+                        markerEnd={targetWasPlayed ? "url(#arrowhead-played)" : "url(#arrowhead)"}
                       />
                     );
                   })}
 
-                  {/* Arrow marker */}
+                  {/* Arrow markers */}
                   <defs>
                     <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
                       <polygon points="0 0, 10 3, 0 6" fill="#666" />
                     </marker>
+                    <marker id="arrowhead-played" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+                      <polygon points="0 0, 10 3, 0 6" fill="#3b82f6" />
+                    </marker>
                   </defs>
 
                   {/* Draw nodes */}
-                  {filteredNodes.map((node) => {
-                    const nodesAtDepth = filteredNodes.filter((n) => n.depth === node.depth);
+                  {deduplicatedNodes.nodes.map((node) => {
+                    const nodesAtDepth = deduplicatedNodes.nodes.filter((n) => n.depth === node.depth);
+                    // Calculate position
                     const x = node.depth * 120 + 60;
                     const y = nodesAtDepth.indexOf(node) * 60 + 40;
+
+                    // Check if this node was actually played (has outgoing edges)
+                    const wasPlayed = dedupedRelations.some(r => r.source_node === node.uuid);
 
                     return (
                       <g key={node.uuid}>
@@ -320,8 +322,10 @@ export default function History() {
                           cx={x}
                           cy={y}
                           r="20"
-                          fill={node.name ? "#3b82f6" : "#666"}
-                          opacity="0.8"
+                          fill={wasPlayed ? "#3b82f6" : "#6b7280"}
+                          stroke={wasPlayed ? "#60a5fa" : "#9ca3af"}
+                          strokeWidth={wasPlayed ? "2" : "1"}
+                          opacity={wasPlayed ? "1" : "0.6"}
                         />
                         {/* Node label */}
                         <text
@@ -351,45 +355,50 @@ export default function History() {
                 </svg>
               </div>
 
-              {/* Depth Slider */}
-              <div className="bg-zinc-900 rounded-lg p-4 border border-zinc-800">
-                <div className="flex items-center gap-4">
-                  <label className="text-xs text-zinc-400">Depth Range:</label>
-                  <input
-                    type="range"
-                    min="0"
-                    max={selectedSession.total_depth}
-                    value={depthRange[0]}
-                    onChange={(e) => setDepthRange([parseInt(e.target.value), depthRange[1]])}
-                    className="flex-1"
-                  />
-                  <span className="text-xs font-mono">{depthRange[0]}</span>
-                  <span className="text-xs">to</span>
-                  <input
-                    type="range"
-                    min="0"
-                    max={selectedSession.total_depth}
-                    value={depthRange[1]}
-                    onChange={(e) => setDepthRange([depthRange[0], parseInt(e.target.value)])}
-                    className="flex-1"
-                  />
-                  <span className="text-xs font-mono">{depthRange[1]}</span>
-                </div>
-              </div>
-
               {/* Stats */}
               <div className="grid grid-cols-3 gap-3">
                 <div className="bg-zinc-900 rounded-lg p-3 border border-zinc-800">
-                  <p className="text-xs text-zinc-500 mb-1">Visible Nodes</p>
-                  <p className="text-xl font-bold">{filteredNodes.length}</p>
+                  <p className="text-xs text-zinc-500 mb-1">Total Nodes</p>
+                  <p className="text-xl font-bold">{deduplicatedNodes.nodes.length}</p>
                 </div>
                 <div className="bg-zinc-900 rounded-lg p-3 border border-zinc-800">
-                  <p className="text-xs text-zinc-500 mb-1">Visible Edges</p>
-                  <p className="text-xl font-bold">{filteredRelations.length}</p>
+                  <p className="text-xs text-zinc-500 mb-1">Total Edges</p>
+                  <p className="text-xl font-bold">{dedupedRelations.length}</p>
                 </div>
                 <div className="bg-zinc-900 rounded-lg p-3 border border-zinc-800">
                   <p className="text-xs text-zinc-500 mb-1">Total Depth</p>
                   <p className="text-xl font-bold">{selectedSession.total_depth}</p>
+                </div>
+              </div>
+
+              {/* Legend */}
+              <div className="bg-zinc-900 rounded-lg p-4 border border-zinc-800">
+                <h3 className="text-xs text-zinc-400 mb-3 uppercase tracking-wide">Legend</h3>
+                <div className="grid grid-cols-2 gap-4 text-xs">
+                  <div className="flex items-center gap-2">
+                    <svg width="24" height="24">
+                      <circle cx="12" cy="12" r="8" fill="#3b82f6" stroke="#60a5fa" strokeWidth="2" />
+                    </svg>
+                    <span className="text-zinc-300">Played chord (has progression)</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <svg width="24" height="24">
+                      <circle cx="12" cy="12" r="8" fill="#6b7280" stroke="#9ca3af" strokeWidth="1" opacity="0.6" />
+                    </svg>
+                    <span className="text-zinc-300">Suggested chord (not played)</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <svg width="24" height="24">
+                      <line x1="2" y1="12" x2="22" y2="12" stroke="#3b82f6" strokeWidth="3" opacity="0.8" />
+                    </svg>
+                    <span className="text-zinc-300">Played progression</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <svg width="24" height="24">
+                      <line x1="2" y1="12" x2="22" y2="12" stroke="#666" strokeWidth="1.5" opacity="0.4" />
+                    </svg>
+                    <span className="text-zinc-300">Suggested progression</span>
+                  </div>
                 </div>
               </div>
             </div>
