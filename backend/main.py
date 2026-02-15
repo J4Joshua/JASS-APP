@@ -57,11 +57,6 @@ class Relation:
 
 NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
 
-# Custom note-set → chord name overrides (checked before pychord)
-CHORD_OVERRIDES: dict[frozenset[str], str] = {
-    frozenset({"C", "D", "F"}): "F5/D",
-}
-
 # --- Global state ---
 clients: set[WebSocket] = set()
 loop: asyncio.AbstractEventLoop | None = None
@@ -69,11 +64,11 @@ tis_idx: TISIndex | None = None
 queue: asyncio.Queue[frozenset[int]] = asyncio.Queue()
 
 # Graph tracking state
-last_chord_name: str | None = None
+last_chroma: tuple[int, ...] | None = None
 graph_depth: int = 0
 nodes: list[Node] = []
 relations: list[Relation] = []
-allowed_suggestions: set[str] = set()
+allowed_suggestions: set[tuple[int, ...]] = set()
 
 
 # --- Stage 1: MIDI capture (rtmidi thread) ---
@@ -120,7 +115,7 @@ class MidiCapture:
 
 async def chord_worker():
     """Reads note snapshots from the queue, detects chords, broadcasts."""
-    global last_chord_name, graph_depth, nodes, relations, allowed_suggestions
+    global last_chroma, graph_depth, nodes, relations, allowed_suggestions
 
     from pychord.analyzer import find_chords_from_notes
 
@@ -135,50 +130,45 @@ async def chord_worker():
         # build chroma + note names
         pitch_classes = {n % 12 for n in snapshot}
         chroma = [1 if i in pitch_classes else 0 for i in range(12)]
+        chroma_key = tuple(chroma)
         names = [NOTE_NAMES[pc] for pc in sorted(pitch_classes)]
 
-        # detect chord (check overrides first, then pychord)
-        chord_name = CHORD_OVERRIDES.get(frozenset(names))
-        if chord_name is None and len(names) >= 2:
+        chord_name: str | None = None
+        if len(names) >= 2:
             chords = find_chords_from_notes(names)
             if chords:
                 chord_name = str(chords[0])
-
-        print(f"[chord_worker] detected: {chord_name!r}  notes: {names}", file=sys.stderr)
-
-        # Gate: ignore unrecognized input
         if chord_name is None:
-            print(f"[chord_worker] skipped: no chord recognized", file=sys.stderr)
+            chord_name = "-".join(names) if names else "?"
+
+        print(f"[chord_worker] detected: {chord_name!r}  notes: {names}  chroma={list(chroma_key)}", file=sys.stderr)
+
+        # Gate: if we have suggestions, only accept chords whose chroma matches
+        if allowed_suggestions and chroma_key not in allowed_suggestions:
+            print(f"[chord_worker] REJECTED {chord_name!r}  played={list(chroma_key)}  allowed={[list(c) for c in allowed_suggestions]}", file=sys.stderr)
             continue
 
-        # Gate: if we have suggestions, only accept matching chords
-        root_name = chord_name.split("/")[0]
-        if allowed_suggestions and root_name not in allowed_suggestions:
-            print(f"[chord_worker] REJECTED {chord_name!r} (root={root_name!r}) — not in allowed {allowed_suggestions}", file=sys.stderr)
-            continue
+        print(f"[chord_worker] ACCEPTED {chord_name!r}  chroma={list(chroma_key)}", file=sys.stderr)
 
-        print(f"[chord_worker] ACCEPTED {chord_name!r} (root={root_name!r})", file=sys.stderr)
-
-        # Get suggestions for accepted chord (use root name for lookup)
+        # Get suggestions for accepted chord
         suggestions = await asyncio.to_thread(
-            _get_suggestions, root_name, chroma
+            _get_suggestions, chord_name, chroma
         )
 
         print(f"[chord_worker] suggestions: {[s['name'] for s in suggestions]}", file=sys.stderr)
 
-        # Update allowed suggestions for next chord
-        allowed_suggestions = {s["name"] for s in suggestions}
-        print(f"[chord_worker] allowed_suggestions now: {allowed_suggestions}", file=sys.stderr)
+        # Update allowed suggestions for next chord (set of chroma tuples)
+        allowed_suggestions = {tuple(s["chroma"]) for s in suggestions}
 
-        # Check if chord changed and update graph
-        if root_name != last_chord_name:
-            last_chord_name = root_name
+        # Check if chord changed (by chroma) and update graph
+        if chroma_key != last_chroma:
+            last_chroma = chroma_key
             graph_depth += 1
 
             # Create node for current chord
             current_node = Node(
                 uuid=str(uuid.uuid4()),
-                name=root_name,
+                name=chord_name,
                 depth=graph_depth,
                 chroma=chroma
             )
@@ -204,7 +194,7 @@ async def chord_worker():
 
         await broadcast({
             "type": "chord",
-            "chord": {"name": root_name, "notes": names, "chroma": chroma},
+            "chord": {"name": chord_name, "notes": names, "chroma": chroma},
             "suggestions": suggestions,
             "graph": {
                 "nodes": [asdict(n) for n in nodes],
@@ -285,8 +275,8 @@ def save_session() -> dict:
 
 def reset_session():
     """Reset global state for a new session."""
-    global last_chord_name, graph_depth, nodes, relations, allowed_suggestions
-    last_chord_name = None
+    global last_chroma, graph_depth, nodes, relations, allowed_suggestions
+    last_chroma = None
     graph_depth = 0
     nodes = []
     relations = []
