@@ -1,15 +1,17 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import ChordKeyboard from "@/components/ChordKeyboard";
+import { Background } from "@/components/Background/Background";
+import { ChordGraph } from "@/components/ChordGraph/ChordGraph";
+import type { ChordGraphState } from "@/types/chord";
+import { KEY_TO_MIDI, midiNotesToNames } from "@/utils/keyboardToMidi";
 
 type ChordMsg = {
   type: "chord";
   chord: { name: string | null; notes: string[]; chroma: number[] };
   suggestions: { name: string; notes: string[]; chroma: number[]; tension: number }[];
 };
-
 
 export default function Home() {
   const [status, setStatus] = useState<"disconnected" | "connecting" | "connected">("disconnected");
@@ -20,6 +22,73 @@ export default function Home() {
   const [log, setLog] = useState<string[]>([]);
   const wsRef = useRef<WebSocket | null>(null);
   const logRef = useRef<HTMLDivElement>(null);
+  const playAreaRef = useRef<HTMLDivElement>(null);
+
+  const [keyboardHeldNotes, setKeyboardHeldNotes] = useState<Set<number>>(new Set());
+
+  // Live chord graph state — initialize with sample so suggestions show on load
+  const [chordGraphState, setChordGraphState] = useState<ChordGraphState | null>(() => ({
+    current: { id: "initial-current", chordId: "C" },
+    previous: [],
+    next: [
+      { id: "initial-next-0", chordId: "F", probability: 0.8 },
+      { id: "initial-next-1", chordId: "G", probability: 0.75 },
+      { id: "initial-next-2", chordId: "Am", probability: 0.85 },
+    ],
+  }));
+  const [notesMap, setNotesMap] = useState<Record<string, string[]>>(() => ({
+    C: ["C", "E", "G"],
+    F: ["F", "A", "C"],
+    G: ["G", "B", "D"],
+    Am: ["A", "C", "E"],
+  }));
+
+  // Transform WebSocket data to ChordGraphState format
+  function transformToChordGraphState(chordMsg: ChordMsg): ChordGraphState | null {
+    // If no chord name, return null (no visualization)
+    if (!chordMsg.chord.name) {
+      return null;
+    }
+
+    // Create current chord node
+    const current = {
+      id: `current-${Date.now()}`,
+      chordId: chordMsg.chord.name,
+    };
+
+    // Transform suggestions to next nodes
+    // Convert tension to probability: lower tension = higher probability
+    const maxTension = Math.max(...chordMsg.suggestions.map(s => s.tension), 0.01);
+    const next = chordMsg.suggestions.slice(0, 3).map((suggestion, i) => ({
+      id: `next-${i}-${Date.now()}`,
+      chordId: suggestion.name,
+      // Invert tension: lower tension = better = higher probability
+      probability: 1 - (suggestion.tension / maxTension),
+    }));
+
+    return {
+      current,
+      previous: [], // Not using previous for now
+      next,
+    };
+  }
+
+  // Create notes map from WebSocket data
+  function createNotesMap(chordMsg: ChordMsg): Record<string, string[]> {
+    const notesMap: Record<string, string[]> = {};
+
+    // Add current chord notes
+    if (chordMsg.chord.name) {
+      notesMap[chordMsg.chord.name] = chordMsg.chord.notes;
+    }
+
+    // Add suggestion notes
+    chordMsg.suggestions.forEach(suggestion => {
+      notesMap[suggestion.name] = suggestion.notes;
+    });
+
+    return notesMap;
+  }
 
   function addLog(msg: string) {
     setLog((prev) => [...prev.slice(-99), `${new Date().toLocaleTimeString()} ${msg}`]);
@@ -38,14 +107,18 @@ export default function Home() {
     ws.onopen = () => {
       setStatus("connected");
       addLog("Connected!");
+      console.log("✅ WebSocket CONNECTED");
     };
 
     ws.onmessage = (e) => {
+      console.log("📨 Raw WebSocket message received:", e.data);
       try {
         const data: ChordMsg = JSON.parse(e.data);
+        console.log("📦 Parsed data:", data);
         if (data.type === "chord") {
           setChord(data.chord);
           setSuggestions(data.suggestions);
+          if (data.chord.notes.length === 0) setKeyboardHeldNotes(new Set());
           if (data.chord.notes.length > 0) {
             setLastChord(data.chord);
           }
@@ -56,6 +129,20 @@ export default function Home() {
             ? data.suggestions.map((s) => `${s.name} [${s.chroma.join("")}] (t:${s.tension})`).join(", ")
             : "none";
           addLog(`chord: ${data.chord.name ?? "(none)"} | notes: [${data.chord.notes.join(", ")}] | suggestions: ${sugStr}`);
+
+          // Transform and update visualization
+          const transformedState = transformToChordGraphState(data);
+          const transformedNotesMap = createNotesMap(data);
+          console.log("🎹 WebSocket Message Received:");
+          console.log("  Original:", data);
+          console.log("  Transformed State:", transformedState);
+          console.log("  Notes Map:", transformedNotesMap);
+
+          // Update live visualization state
+          if (transformedState) {
+            setChordGraphState(transformedState);
+            setNotesMap(transformedNotesMap);
+          }
         }
       } catch {
         addLog(`raw: ${e.data}`);
@@ -75,6 +162,53 @@ export default function Home() {
   function disconnect() {
     wsRef.current?.close();
   }
+
+  const sendNotesToBackend = useCallback((notes: number[]) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: "notes", notes }));
+    }
+  }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable) return;
+      const midi = KEY_TO_MIDI[e.key.toLowerCase()];
+      if (midi === undefined || e.repeat) return;
+      e.preventDefault();
+      setKeyboardHeldNotes((prev) => new Set(prev).add(midi));
+    };
+    const handleKeyUp = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable) return;
+      const midi = KEY_TO_MIDI[e.key.toLowerCase()];
+      if (midi === undefined || e.repeat) return;
+      e.preventDefault();
+      setKeyboardHeldNotes((prev) => {
+        const next = new Set(prev);
+        next.delete(midi);
+        return next;
+      });
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (status !== "connected") return;
+    const notes = Array.from(keyboardHeldNotes).sort((a, b) => a - b);
+    sendNotesToBackend(notes);
+  }, [keyboardHeldNotes, status, sendNotesToBackend]);
+
+  useEffect(() => {
+    if (status === "connected" && playAreaRef.current) {
+      playAreaRef.current.focus({ preventScroll: true });
+    }
+  }, [status]);
 
   const endSession = async () => {
     try {
@@ -104,84 +238,59 @@ export default function Home() {
   const statusColor =
     status === "connected" ? "bg-green-500" : status === "connecting" ? "bg-yellow-500" : "bg-red-500";
 
-  return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 p-8 font-[family-name:var(--font-geist-mono)]">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold">JASS - MIDI WebSocket Test</h1>
-        <Link href="/history" className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded transition text-sm">
-          View History →
-        </Link>
-      </div>
+  // Fallback when chordGraphState is cleared (e.g. Release with no name)
+  const fallbackChordGraphState: ChordGraphState = {
+    current: { id: "fallback-current", chordId: "?" },
+    previous: [],
+    next: [],
+  };
 
-      {/* Connection */}
-      <div className="flex items-center gap-4 mb-8">
-        <span className={`w-3 h-3 rounded-full ${statusColor}`} />
-        <span className="text-sm">{status}</span>
-        {status === "disconnected" ? (
-          <button onClick={connect} className="px-4 py-1.5 bg-blue-600 rounded hover:bg-blue-500 text-sm">
-            Connect
-          </button>
-        ) : (
-          <button onClick={disconnect} className="px-4 py-1.5 bg-zinc-700 rounded hover:bg-zinc-600 text-sm">
+  const fallbackNotesMap = { "?": [] };
+
+  return (
+    <div className="min-h-screen bg-zinc-950 text-zinc-100 font-[family-name:var(--font-geist-mono)]">
+      {/* Bubble Visualization - each sphere has its keyboard directly below it */}
+      <div className="relative w-full h-screen">
+        <Background />
+
+        {/* Connection controls overlay */}
+        <div className="absolute top-4 left-4 z-10 flex items-center gap-4 bg-white/80 backdrop-blur-sm px-4 py-2 rounded-lg border border-gray-200">
+          <span className={`w-3 h-3 rounded-full ${statusColor}`} />
+          <span className="text-sm text-gray-700">{status}</span>
+          {status === "disconnected" ? (
+            <button onClick={connect} className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-500 text-sm">
+              Connect
+            </button>
+          ) : (
+          <button onClick={disconnect} className="px-3 py-1 bg-gray-600 text-white rounded hover:bg-gray-500 text-sm">
             Disconnect
           </button>
-        )}
-        <button onClick={endSession} className="px-4 py-1.5 bg-emerald-600 rounded hover:bg-emerald-700 text-sm">
-          End Session
-        </button>
-      </div>
+          )}
+          <Link href="/history" className="px-3 py-1 bg-zinc-700 hover:bg-zinc-600 rounded text-white text-sm">
+            View History →
+          </Link>
+          <button onClick={endSession} className="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 rounded text-white text-sm">
+            End Session
+          </button>
+        </div>
 
-      {/* Current Chord */}
-      <div className="mb-8">
-        <h2 className="text-sm text-zinc-400 mb-2 uppercase tracking-wide">Current Chord</h2>
-        {(() => {
-          const active = chord && chord.notes.length > 0;
-          const display = active ? chord : lastChord;
-          if (display) {
-            return (
-              <div className={`max-w-xs ${!active ? "opacity-50" : ""}`}>
-                <ChordKeyboard
-                  name={display.name ?? "?"}
-                  notes={display.notes}
-                  color="#3B82F6"
-                  description={`Notes: ${display.notes.join(" - ")}`}
-                />
-              </div>
-            );
-          }
-          return (
-            <div className="bg-zinc-900 rounded-lg p-6 border border-zinc-800">
-              <p className="text-zinc-500 italic">Play some notes on your MIDI keyboard...</p>
-            </div>
-          );
-        })()}
+        <div className="absolute inset-0" tabIndex={0} ref={playAreaRef}>
+          <ChordGraph
+            state={chordGraphState || fallbackChordGraphState}
+            showNotes={false}
+            keyboardMode={true}
+            notesMap={notesMap || fallbackNotesMap}
+            activeNotes={
+              keyboardHeldNotes.size > 0
+                ? midiNotesToNames(Array.from(keyboardHeldNotes))
+                : (chord?.notes ?? [])
+            }
+          />
+        </div>
       </div>
-
-      {/* Suggestions */}
-      {(() => {
-        const active = suggestions.length > 0;
-        const display = active ? suggestions : lastSuggestions;
-        if (display.length === 0) return null;
-        return (
-          <div className="mb-8">
-            <h2 className="text-sm text-zinc-400 mb-2 uppercase tracking-wide">Suggestions</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {display.map((s, i) => (
-                <ChordKeyboard
-                  key={i}
-                  name={s.name}
-                  notes={s.notes}
-                  color={["#4ECDC4", "#FF6B6B", "#9B59B6"][i % 3]}
-                  description={`tension: ${s.tension}`}
-                />
-              ))}
-            </div>
-          </div>
-        );
-      })()}
 
       {/* Log */}
-      <div>
+      <div className="p-8">
         <h2 className="text-sm text-zinc-400 mb-2 uppercase tracking-wide">Event Log</h2>
         <div
           ref={logRef}

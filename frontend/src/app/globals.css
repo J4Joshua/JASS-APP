@@ -3,6 +3,35 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+
+  /* Chord visualization theme colors */
+  --color-bg: #f0edf5;
+  --color-bg-subtle: #e8e4f0;
+  --color-bg-card: rgba(255, 255, 255, 0.85);
+  --color-gold-bright: #e890b8;
+  --color-gold: #d880b0;
+  --color-gold-deep: #c870a0;
+  --color-gold-dim: rgba(216, 128, 176, 0.25);
+  --color-orange: #c090d8;
+  --color-peach: #d8a0e0;
+  --color-amber: #b888d0;
+  --color-orange-dim: rgba(192, 144, 216, 0.25);
+  --color-brown: #8a6890;
+  --color-taupe: #a088a8;
+  --color-mocha: #6a4878;
+  --color-brown-dim: rgba(138, 104, 144, 0.2);
+  --color-teal: #8088d0;
+  --color-mint: #a8b0e0;
+  --color-teal-dim: rgba(128, 136, 208, 0.2);
+  --color-label: #3a3040;
+  --color-label-dim: rgba(58, 48, 64, 0.55);
+  --color-label-ghost: rgba(58, 48, 64, 0.25);
+  --glass-bg: rgba(255, 255, 255, 0.7);
+  --glass-border: rgba(58, 48, 64, 0.08);
+  --glass-border-active: rgba(216, 128, 176, 0.4);
+  --shadow-sm: 0 2px 8px rgba(58, 48, 64, 0.08);
+  --shadow-md: 0 4px 20px rgba(58, 48, 64, 0.1);
+  --shadow-lg: 0 8px 40px rgba(58, 48, 64, 0.12);
 }
 
 @theme inline {
