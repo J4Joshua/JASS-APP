@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import ChordKeyboard from "@/components/ChordKeyboard";
 
 type ChordMsg = {
   type: "chord";
@@ -8,12 +9,13 @@ type ChordMsg = {
   suggestions: { name: string; notes: string[]; chroma: number[]; tension: number }[];
 };
 
-const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 
 export default function Home() {
   const [status, setStatus] = useState<"disconnected" | "connecting" | "connected">("disconnected");
   const [chord, setChord] = useState<ChordMsg["chord"] | null>(null);
+  const [lastChord, setLastChord] = useState<ChordMsg["chord"] | null>(null);
   const [suggestions, setSuggestions] = useState<ChordMsg["suggestions"]>([]);
+  const [lastSuggestions, setLastSuggestions] = useState<ChordMsg["suggestions"]>([]);
   const [log, setLog] = useState<string[]>([]);
   const wsRef = useRef<WebSocket | null>(null);
   const logRef = useRef<HTMLDivElement>(null);
@@ -43,6 +45,12 @@ export default function Home() {
         if (data.type === "chord") {
           setChord(data.chord);
           setSuggestions(data.suggestions);
+          if (data.chord.notes.length > 0) {
+            setLastChord(data.chord);
+          }
+          if (data.suggestions.length > 0) {
+            setLastSuggestions(data.suggestions);
+          }
           const sugStr = data.suggestions.length
             ? data.suggestions.map((s) => `${s.name} [${s.chroma.join("")}] (t:${s.tension})`).join(", ")
             : "none";
@@ -102,59 +110,51 @@ export default function Home() {
       {/* Current Chord */}
       <div className="mb-8">
         <h2 className="text-sm text-zinc-400 mb-2 uppercase tracking-wide">Current Chord</h2>
-        <div className="bg-zinc-900 rounded-lg p-6 border border-zinc-800">
-          {chord && chord.notes.length > 0 ? (
-            <>
-              <p className="text-4xl font-bold mb-2">{chord.name ?? "?"}</p>
-              <p className="text-zinc-400">Notes: {chord.notes.join(" - ")}</p>
-              {/* Piano-style chroma display */}
-              <div className="flex gap-1 mt-4">
-                {chord.chroma.map((v, i) => (
-                  <div
-                    key={i}
-                    className={`flex flex-col items-center gap-1 ${
-                      v ? "text-white" : "text-zinc-600"
-                    }`}
-                  >
-                    <div
-                      className={`w-8 h-10 rounded ${
-                        v ? "bg-blue-500" : "bg-zinc-800"
-                      }`}
-                    />
-                    <span className="text-xs">{NOTE_NAMES[i]}</span>
-                  </div>
-                ))}
+        {(() => {
+          const active = chord && chord.notes.length > 0;
+          const display = active ? chord : lastChord;
+          if (display) {
+            return (
+              <div className={`max-w-xs ${!active ? "opacity-50" : ""}`}>
+                <ChordKeyboard
+                  name={display.name ?? "?"}
+                  notes={display.notes}
+                  color="#3B82F6"
+                  description={`Notes: ${display.notes.join(" - ")}`}
+                />
               </div>
-            </>
-          ) : (
-            <p className="text-zinc-500 italic">Play some notes on your MIDI keyboard...</p>
-          )}
-        </div>
+            );
+          }
+          return (
+            <div className="bg-zinc-900 rounded-lg p-6 border border-zinc-800">
+              <p className="text-zinc-500 italic">Play some notes on your MIDI keyboard...</p>
+            </div>
+          );
+        })()}
       </div>
 
       {/* Suggestions */}
-      {suggestions.length > 0 && (
-        <div className="mb-8">
-          <h2 className="text-sm text-zinc-400 mb-2 uppercase tracking-wide">Suggestions</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            {suggestions.map((s, i) => (
-              <div key={i} className="bg-zinc-900 rounded-lg p-4 border border-zinc-800">
-                <p className="font-bold text-lg">{s.name}</p>
-                <p className="text-sm text-zinc-400">{s.notes.join(" - ")}</p>
-                <p className="text-xs text-zinc-500 mt-1">tension: {s.tension}</p>
-                <div className="flex gap-0.5 mt-2">
-                  {s.chroma.map((v, j) => (
-                    <div
-                      key={j}
-                      className={`w-5 h-6 rounded-sm ${v ? "bg-emerald-500" : "bg-zinc-800"}`}
-                    />
-                  ))}
-                </div>
-              </div>
-            ))}
+      {(() => {
+        const active = suggestions.length > 0;
+        const display = active ? suggestions : lastSuggestions;
+        if (display.length === 0) return null;
+        return (
+          <div className="mb-8">
+            <h2 className="text-sm text-zinc-400 mb-2 uppercase tracking-wide">Suggestions</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {display.map((s, i) => (
+                <ChordKeyboard
+                  key={i}
+                  name={s.name}
+                  notes={s.notes}
+                  color={["#4ECDC4", "#FF6B6B", "#9B59B6"][i % 3]}
+                  description={`tension: ${s.tension}`}
+                />
+              ))}
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Log */}
       <div>
