@@ -38,20 +38,22 @@ interface ChordKeyboardProps {
   minimal?: boolean;
   /** Micro size for embedding below small spheres (next chords) */
   micro?: boolean;
+  /** Scale factor (e.g. 1.2 = 20% bigger) */
+  scale?: number;
 }
 
-export default function ChordKeyboard({ name, notes, color, description, compact = false, minimal = false, micro = false }: ChordKeyboardProps) {
-  const wkW = micro ? 26 : compact ? 36 : WHITE_KEY_WIDTH;
-  const bkW = micro ? 16 : compact ? 22 : BLACK_KEY_WIDTH;
-  const wkH = micro ? 58 : compact ? 90 : WHITE_KEY_HEIGHT;
-  const bkH = micro ? 35 : compact ? 55 : BLACK_KEY_HEIGHT;
+export default function ChordKeyboard({ name, notes, color, description, compact = false, minimal = false, micro = false, scale = 1 }: ChordKeyboardProps) {
+  const wkW = (micro ? 26 : compact ? 36 : WHITE_KEY_WIDTH) * scale;
+  const bkW = (micro ? 16 : compact ? 22 : BLACK_KEY_WIDTH) * scale;
+  const wkH = (micro ? 58 : compact ? 90 : WHITE_KEY_HEIGHT) * scale;
+  const bkH = (micro ? 35 : compact ? 55 : BLACK_KEY_HEIGHT) * scale;
   const totalWidth = wkW * 7;
 
   return (
     <div
-      className="font-[family-name:var(--font-geist-mono)]"
+      className="font-[family-name:var(--font-patrick-hand)]"
       style={{
-        padding: micro ? 6 : compact ? 10 : minimal ? 12 : 20,
+        padding: (micro ? 6 : compact ? 10 : minimal ? 12 : 20) * scale,
         ...(minimal
           ? { background: "transparent", border: "none" }
           : {
@@ -64,7 +66,7 @@ export default function ChordKeyboard({ name, notes, color, description, compact
       {/* Chord name */}
       <p
         className="font-extrabold tracking-tight text-center"
-        style={{ color, fontSize: micro ? 11 : compact ? 14 : 20, marginBottom: micro ? 3 : compact ? 8 : 16 }}
+        style={{ color, fontSize: (micro ? 13 : compact ? 18 : 22) * scale, marginBottom: (micro ? 3 : compact ? 8 : 16) * scale }}
       >
         {name}
       </p>
@@ -95,13 +97,13 @@ export default function ChordKeyboard({ name, notes, color, description, compact
                     ? `0 0 12px ${color}44, inset 0 -4px 8px rgba(0,0,0,0.08)`
                     : "inset 0 -4px 8px rgba(0,0,0,0.05), 1px 2px 3px rgba(0,0,0,0.1)",
                   zIndex: 1,
-                  paddingBottom: 8,
+                  paddingBottom: 8 * scale,
                 }}
               >
                 {highlighted && (
                   <span
-                    className="text-[11px] font-bold"
-                    style={{ color }}
+                    className="font-bold"
+                    style={{ color, fontSize: 13 * scale }}
                   >
                     {NOTE_DISPLAY[note]}
                   </span>
@@ -131,11 +133,11 @@ export default function ChordKeyboard({ name, notes, color, description, compact
                     ? `0 0 12px ${color}88, inset 0 -3px 6px rgba(0,0,0,0.3)`
                     : "inset 0 -3px 6px rgba(0,0,0,0.4), 2px 2px 4px rgba(0,0,0,0.5)",
                   zIndex: 2,
-                  paddingBottom: 6,
+                  paddingBottom: 6 * scale,
                 }}
               >
                 {highlighted && (
-                  <span className="text-[9px] font-bold text-white drop-shadow-sm">
+                  <span className="font-bold text-white drop-shadow-sm" style={{ fontSize: 11 * scale }}>
                     {NOTE_DISPLAY[note]}
                   </span>
                 )}

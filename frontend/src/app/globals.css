@@ -53,3 +53,51 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Background orb animations — subtle breathing/drift */
+.background-orb {
+  animation: background-orb-float 18s ease-in-out infinite;
+}
+
+.background-orb-1 {
+  animation-delay: 0s;
+}
+
+.background-orb-2 {
+  animation-delay: -6s;
+}
+
+.background-orb-3 {
+  animation-delay: -12s;
+}
+
+@keyframes background-orb-float {
+  0%, 100% {
+    transform: translate(0, 0) scale(1);
+    opacity: 1;
+  }
+  33% {
+    transform: translate(2%, 1.5%) scale(1.02);
+    opacity: 0.92;
+  }
+  66% {
+    transform: translate(-1.5%, 2%) scale(0.98);
+    opacity: 0.96;
+  }
+}
+
+/* Center orb uses translate(-50%, -50%) so override */
+.background-orb-3 {
+  animation: background-orb-center 20s ease-in-out infinite;
+}
+
+@keyframes background-orb-center {
+  0%, 100% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: translate(-50%, -50%) scale(1.08);
+    opacity: 0.9;
+  }
+}
