@@ -276,11 +276,12 @@ export default function History() {
     : [];
 
   const cardStyle = {
-    background: "linear-gradient(145deg, rgba(248, 244, 252, 0.95) 0%, rgba(236, 228, 248, 0.9) 100%)",
+    background: "linear-gradient(145deg, rgba(255, 255, 255, 0.95) 0%, rgba(250, 250, 250, 0.9) 100%)",
     backdropFilter: "blur(12px)",
-    border: "1px solid rgba(196, 184, 208, 0.5)",
-    boxShadow: "0 4px 20px rgba(168, 140, 200, 0.12), 0 1px 3px rgba(0,0,0,0.04), inset 0 1px 0 rgba(255,255,255,0.6)",
+    border: "1px solid rgba(212, 212, 220, 0.6)",
+    boxShadow: "0 4px 20px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0,0,0,0.04), inset 0 1px 0 rgba(255,255,255,0.8)",
   };
+
 
   function handleNodeClick(node: Node) {
     // Next: chords this node points TO (outgoing edges)
@@ -352,27 +353,17 @@ export default function History() {
       <Background />
 
       {/* Header */}
-      <div
-        className="relative z-10 flex items-center justify-between mb-8 px-5 py-3 rounded-xl"
-        style={cardStyle}
-      >
+      <div className="connection-bar relative z-10 flex items-center justify-between mb-8 px-5 py-3 rounded-2xl">
         <div className="flex items-center gap-3">
           <span
-            className="w-2.5 h-2.5 rounded-full ring-2 ring-white/60"
+            className="w-2.5 h-2.5 rounded-full ring-2 ring-white/60 flex-shrink-0"
             style={{ backgroundColor: statusDotColor }}
           />
-          <h1 className="text-2xl font-bold" style={{ color: "#5c4a6c" }}>
+          <h1 className="text-2xl font-bold" style={{ color: "#374151" }}>
             Chord History
           </h1>
         </div>
-        <Link
-          href="/"
-          className="px-4 py-2 rounded-lg text-white text-sm font-medium transition-all hover:brightness-110"
-          style={{
-            background: "linear-gradient(160deg, #9080d8 0%, #7868c0 100%)",
-            boxShadow: "0 2px 8px rgba(120, 104, 192, 0.35), inset 0 1px 0 rgba(255,255,255,0.2)",
-          }}
-        >
+        <Link href="/" className="connection-bar-btn px-4 py-2 rounded-xl text-sm font-medium">
           ← Back to Live
         </Link>
       </div>
@@ -382,12 +373,12 @@ export default function History() {
 
           {/* Sessions List */}
           <div className="rounded-xl p-4" style={cardStyle}>
-            <h2 className="text-sm mb-3 uppercase tracking-wide" style={{ color: "#7c6c8c" }}>
+            <h2 className="text-sm mb-3 uppercase tracking-wide" style={{ color: "#6b7280" }}>
               Sessions
             </h2>
             <div className="space-y-1 max-h-96 overflow-y-auto">
               {sessions.length === 0 ? (
-                <p className="text-xs" style={{ color: "#9c8ca8" }}>No sessions yet</p>
+                <p className="text-xs" style={{ color: "#9ca3af" }}>No sessions yet</p>
               ) : (
                 sessions.map((session) => {
                   const isSelected = selectedSession?.timestamp === session.timestamp;
@@ -398,10 +389,10 @@ export default function History() {
                       className="w-full text-left px-3 py-2 rounded-lg text-xs transition-all hover:ring-1 hover:ring-[#a898b8]/50"
                       style={{
                         background: isSelected
-                          ? "linear-gradient(160deg, #9080d8 0%, #7868c0 100%)"
-                          : "rgba(220, 212, 232, 0.5)",
-                        color: isSelected ? "white" : "#5c4a6c",
-                        boxShadow: isSelected ? "0 2px 8px rgba(120, 104, 192, 0.3), inset 0 1px 0 rgba(255,255,255,0.2)" : "none",
+                          ? "linear-gradient(160deg, #6b7280 0%, #4b5563 100%)"
+                          : "rgba(243, 244, 246, 0.8)",
+                        color: isSelected ? "white" : "#374151",
+                        boxShadow: isSelected ? "0 2px 8px rgba(75, 85, 99, 0.25), inset 0 1px 0 rgba(255,255,255,0.2)" : "none",
                       }}
                     >
                       <div className="font-bold text-sm">Session {session.session_number}</div>
@@ -424,16 +415,16 @@ export default function History() {
               <div className="rounded-xl p-4" style={cardStyle}>
                 <div className="flex items-center justify-between mb-4">
                   <div>
-                    <h3 className="text-xs uppercase tracking-wide" style={{ color: "#7c6c8c" }}>Similar Songs</h3>
-                    <p className="text-xs mt-1" style={{ color: "#9c8ca8" }}>Powered by Perplexity & Spotify</p>
+                    <h3 className="text-xs uppercase tracking-wide" style={{ color: "#6b7280" }}>Similar Songs</h3>
+                    <p className="text-xs mt-1" style={{ color: "#9ca3af" }}>Powered by Perplexity & Spotify</p>
                   </div>
                   <button
                     onClick={fetchRecommendedSongs}
                     disabled={isLoadingSongs}
                     className="px-3 py-1 rounded-lg text-xs font-medium text-white transition-all hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed"
                     style={{
-                      background: "linear-gradient(160deg, #9080d8 0%, #7868c0 100%)",
-                      boxShadow: "0 2px 8px rgba(120, 104, 192, 0.35), inset 0 1px 0 rgba(255,255,255,0.2)",
+                      background: "linear-gradient(160deg, #6b7280 0%, #4b5563 100%)",
+                      boxShadow: "0 2px 8px rgba(75, 85, 99, 0.3), inset 0 1px 0 rgba(255,255,255,0.2)",
                     }}
                   >
                     {isLoadingSongs ? "Loading..." : "Get Recommendations"}
@@ -441,8 +432,8 @@ export default function History() {
                 </div>
 
                 {chordProgression && (
-                  <p className="text-xs mb-3" style={{ color: "#5c4a6c" }}>
-                    <span style={{ color: "#7c6c8c" }}>Progression:</span> {chordProgression}
+                  <p className="text-xs mb-3" style={{ color: "#374151" }}>
+                    <span style={{ color: "#6b7280" }}>Progression:</span> {chordProgression}
                   </p>
                 )}
 
@@ -457,8 +448,8 @@ export default function History() {
                         key={idx}
                         className="rounded-lg p-3 cursor-pointer transition-all hover:shadow-md"
                         style={{
-                          background: "rgba(220, 212, 232, 0.3)",
-                          border: "1px solid rgba(196, 184, 208, 0.3)",
+                          background: "rgba(249, 250, 251, 0.9)",
+                          border: "1px solid rgba(209, 213, 219, 0.6)",
                         }}
                         onClick={() => song.spotify_url && window.open(song.spotify_url, "_blank")}
                       >
@@ -472,22 +463,22 @@ export default function History() {
                           ) : (
                             <div
                               className="w-full h-32 rounded flex items-center justify-center"
-                              style={{ background: "rgba(168, 140, 200, 0.2)" }}
+                              style={{ background: "rgba(229, 231, 235, 0.6)" }}
                             >
-                              <span style={{ color: "#9c8ca8" }}>♪</span>
+                              <span style={{ color: "#9ca3af" }}>♪</span>
                             </div>
                           )}
                           <div className="min-w-0">
-                            <div className="text-sm font-medium" style={{ color: "#5c4a6c" }}>
+                            <div className="text-sm font-medium" style={{ color: "#374151" }}>
                               {song.title}
                             </div>
                             {song.artists && (
-                              <div className="text-xs mt-0.5" style={{ color: "#7c6c8c" }}>
+                              <div className="text-xs mt-0.5" style={{ color: "#6b7280" }}>
                                 {song.artists}
                               </div>
                             )}
                             {song.album && (
-                              <div className="text-xs mt-0.5 opacity-75" style={{ color: "#9c8ca8" }}>
+                              <div className="text-xs mt-0.5 opacity-75" style={{ color: "#9ca3af" }}>
                                 {song.album}
                               </div>
                             )}
@@ -502,7 +493,7 @@ export default function History() {
                     ))}
                   </div>
                 ) : !isLoadingSongs && !songsError && !chordProgression && (
-                  <div className="text-xs" style={{ color: "#9c8ca8" }}>
+                  <div className="text-xs" style={{ color: "#9ca3af" }}>
                     <p className="mb-2">Click "Get Recommendations" to find songs that use a similar progression.</p>
                   </div>
                 )}
@@ -595,7 +586,7 @@ export default function History() {
                           y={y}
                           textAnchor="middle"
                           dy="0.3em"
-                          fill={wasPlayed ? "white" : "#5c4a6c"}
+                          fill={wasPlayed ? "white" : "#374151"}
                           fontSize="10"
                           fontWeight="bold"
                           pointerEvents="none"
@@ -607,7 +598,7 @@ export default function History() {
                           x={x}
                           y={y + 35}
                           textAnchor="middle"
-                          fill="#7c6c8c"
+                          fill="#6b7280"
                           fontSize="8"
                           pointerEvents="none"
                         >
@@ -622,22 +613,22 @@ export default function History() {
               {/* Stats */}
               <div className="grid grid-cols-3 gap-3">
                 <div className="rounded-xl p-4" style={cardStyle}>
-                  <p className="text-xs mb-1" style={{ color: "#7c6c8c" }}>Total Nodes</p>
-                  <p className="text-xl font-bold" style={{ color: "#5c4a6c" }}>{deduplicatedNodes.nodes.length}</p>
+                  <p className="text-xs mb-1" style={{ color: "#6b7280" }}>Total Nodes</p>
+                  <p className="text-xl font-bold" style={{ color: "#374151" }}>{deduplicatedNodes.nodes.length}</p>
                 </div>
                 <div className="rounded-xl p-4" style={cardStyle}>
-                  <p className="text-xs mb-1" style={{ color: "#7c6c8c" }}>Total Edges</p>
-                  <p className="text-xl font-bold" style={{ color: "#5c4a6c" }}>{dedupedRelations.length}</p>
+                  <p className="text-xs mb-1" style={{ color: "#6b7280" }}>Total Edges</p>
+                  <p className="text-xl font-bold" style={{ color: "#374151" }}>{dedupedRelations.length}</p>
                 </div>
                 <div className="rounded-xl p-4" style={cardStyle}>
-                  <p className="text-xs mb-1" style={{ color: "#7c6c8c" }}>Total Depth</p>
-                  <p className="text-xl font-bold" style={{ color: "#5c4a6c" }}>{selectedSession.total_depth}</p>
+                  <p className="text-xs mb-1" style={{ color: "#6b7280" }}>Total Depth</p>
+                  <p className="text-xl font-bold" style={{ color: "#374151" }}>{selectedSession.total_depth}</p>
                 </div>
               </div>
             </div>
           ) : (
             <div className="rounded-xl p-6 h-96 flex items-center justify-center" style={cardStyle}>
-              <p style={{ color: "#9c8ca8" }}>Select a session to view its chord progression graph</p>
+              <p style={{ color: "#9ca3af" }}>Select a session to view its chord progression graph</p>
             </div>
           )}
         </div>

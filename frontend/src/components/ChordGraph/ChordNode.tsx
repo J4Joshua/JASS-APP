@@ -368,6 +368,7 @@ function ChordNodeComponentInner({
                   minimal
                   micro={false}
                   scale={1.2}
+                  showKeyPressAnimation={role === 'current'}
                 />
               </div>
             </foreignObject>

@@ -5,8 +5,8 @@
   --foreground: #171717;
 
   /* Chord visualization theme colors */
-  --color-bg: #f0edf5;
-  --color-bg-subtle: #e8e4f0;
+  --color-bg: #ffffff;
+  --color-bg-subtle: #f5f5f5;
   --color-bg-card: rgba(255, 255, 255, 0.85);
   --color-gold-bright: #e890b8;
   --color-gold: #d880b0;
@@ -99,5 +99,134 @@ body {
   50% {
     transform: translate(-50%, -50%) scale(1.08);
     opacity: 0.9;
+  }
+}
+
+/* Connection bar — liquid glass (polished specular, soft shadows) */
+.connection-bar {
+  background: linear-gradient(
+    165deg,
+    rgba(255, 255, 255, 0.5) 0%,
+    rgba(248, 250, 252, 0.35) 40%,
+    rgba(241, 245, 249, 0.3) 100%
+  );
+  backdrop-filter: saturate(160%) blur(32px);
+  -webkit-backdrop-filter: saturate(160%) blur(32px);
+  border: 1px solid rgba(255, 255, 255, 0.65);
+  /* Specular highlight — bright streak along top curve */
+  box-shadow:
+    0 1px 2px rgba(255, 255, 255, 0.9) inset,
+    0 1px 1px rgba(255, 255, 255, 0.6) inset,
+    0 -1px 1px rgba(0, 0, 0, 0.03) inset,
+    /* Chromatic edge — subtle blue/magenta shimmer */
+    0 0 0 1px rgba(255, 255, 255, 0.5),
+    0 0 0 1.5px rgba(200, 220, 255, 0.12),
+    0 0 0 2px rgba(255, 210, 230, 0.08),
+    /* Soft diffused drop shadow */
+    0 4px 20px rgba(0, 0, 0, 0.06),
+    0 2px 8px rgba(0, 0, 0, 0.04);
+  transition:
+    background 0.35s ease,
+    box-shadow 0.35s ease,
+    backdrop-filter 0.35s ease,
+    transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.connection-bar:hover {
+  background: linear-gradient(
+    165deg,
+    rgba(255, 255, 255, 0.58) 0%,
+    rgba(250, 252, 255, 0.42) 40%,
+    rgba(245, 248, 252, 0.38) 100%
+  );
+  backdrop-filter: saturate(180%) blur(36px);
+  -webkit-backdrop-filter: saturate(180%) blur(36px);
+  box-shadow:
+    0 2px 4px rgba(255, 255, 255, 0.95) inset,
+    0 1px 2px rgba(255, 255, 255, 0.7) inset,
+    0 -1px 1px rgba(0, 0, 0, 0.02) inset,
+    0 0 0 1px rgba(255, 255, 255, 0.6),
+    0 0 0 1.5px rgba(200, 220, 255, 0.18),
+    0 0 0 2px rgba(255, 210, 230, 0.12),
+    0 6px 28px rgba(0, 0, 0, 0.08),
+    0 3px 12px rgba(0, 0, 0, 0.05);
+  transform: scale(1.02);
+  transform-origin: top left;
+}
+
+/* Bar buttons — liquid glass, glassy selection on hover */
+.connection-bar-btn {
+  position: relative;
+  background: linear-gradient(
+    175deg,
+    rgba(255, 255, 255, 0.5) 0%,
+    rgba(248, 250, 252, 0.38) 50%,
+    rgba(241, 245, 249, 0.32) 100%
+  );
+  color: #374151;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  box-shadow:
+    0 1px 2px rgba(255, 255, 255, 0.8) inset,
+    0 -1px 1px rgba(0, 0, 0, 0.04) inset,
+    0 2px 6px rgba(0, 0, 0, 0.05);
+  text-shadow: none;
+  transition:
+    transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1),
+    box-shadow 0.25s ease,
+    background 0.25s ease,
+    text-shadow 0.25s ease;
+}
+
+/* Glassy selection — soft glow, diffused edges, refraction */
+.connection-bar-btn:hover {
+  transform: translateY(-1px) scale(1.02);
+  background: linear-gradient(
+    175deg,
+    rgba(255, 252, 254, 0.65) 0%,
+    rgba(255, 245, 250, 0.5) 40%,
+    rgba(255, 238, 245, 0.45) 100%
+  );
+  /* Translucent pink/rose sheen at top and bottom edges */
+  box-shadow:
+    0 2px 4px rgba(255, 255, 255, 0.9) inset,
+    0 -2px 4px rgba(255, 180, 200, 0.12) inset,
+    0 2px 4px rgba(255, 200, 220, 0.1) inset,
+    0 0 0 1px rgba(255, 255, 255, 0.6),
+    0 0 16px rgba(255, 190, 210, 0.2),
+    0 0 28px rgba(255, 180, 200, 0.12),
+    0 4px 12px rgba(0, 0, 0, 0.06);
+  /* Liquid refraction — blurry shadow beneath text */
+  text-shadow:
+    0 0 0 currentColor,
+    0 1px 3px rgba(255, 150, 180, 0.25),
+    0 2px 6px rgba(255, 140, 170, 0.15);
+}
+
+.connection-bar-btn:active {
+  transform: translateY(0) scale(0.98);
+  text-shadow: none;
+}
+
+/* HTX-style magic piano — bioluminescent bubbles rising from keys */
+@keyframes magic-piano-rise {
+  0% {
+    transform: translate(-50%, 0) scale(0.8);
+    opacity: 0.9;
+  }
+  100% {
+    transform: translate(
+      calc(-50% + var(--drift, 0px)),
+      var(--rise, -80px)
+    ) scale(0.2);
+    opacity: 0;
+  }
+}
+
+@keyframes magic-piano-glow-pulse {
+  0%, 100% {
+    box-shadow: 0 0 8px var(--glow-color), 0 0 16px var(--glow-color);
+  }
+  50% {
+    box-shadow: 0 0 12px var(--glow-color), 0 0 24px var(--glow-color);
   }
 }

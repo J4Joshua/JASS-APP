@@ -22,6 +22,24 @@ const BLACK_KEY_POSITIONS: Record<string, number> = {
   "C#": 0, "D#": 1, "F#": 3, "G#": 4, "A#": 5,
 };
 
+/** Bioluminescent blend — mix chord color with cyan "blue tears" */
+function bioluminescentColor(hex: string): string {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  const blend = (a: number, b: number, t: number) => Math.round(a * (1 - t) + b * t);
+  return `rgb(${blend(r, 100, 0.3)}, ${blend(g, 200, 0.3)}, ${blend(b, 255, 0.2)})`;
+}
+
+/** Rising bubble particles for magic piano effect — 5 per key with staggered timing */
+const BUBBLE_CONFIGS = [
+  { rise: -70, drift: 4, delay: 0, size: 0.9 },
+  { rise: -90, drift: -6, delay: 0.12, size: 0.6 },
+  { rise: -60, drift: -2, delay: 0.24, size: 0.7 },
+  { rise: -85, drift: 5, delay: 0.36, size: 0.5 },
+  { rise: -75, drift: -4, delay: 0.18, size: 0.65 },
+];
+
 const WHITE_KEY_WIDTH = 38;
 const BLACK_KEY_WIDTH = 24;
 const WHITE_KEY_HEIGHT = 120;
@@ -40,9 +58,11 @@ interface ChordKeyboardProps {
   micro?: boolean;
   /** Scale factor (e.g. 1.2 = 20% bigger) */
   scale?: number;
+  /** Show floating animation above keys being pressed (main keyboard only) */
+  showKeyPressAnimation?: boolean;
 }
 
-export default function ChordKeyboard({ name, notes, color, description, compact = false, minimal = false, micro = false, scale = 1 }: ChordKeyboardProps) {
+export default function ChordKeyboard({ name, notes, color, description, compact = false, minimal = false, micro = false, scale = 1, showKeyPressAnimation = false }: ChordKeyboardProps) {
   const wkW = (micro ? 26 : compact ? 36 : WHITE_KEY_WIDTH) * scale;
   const bkW = (micro ? 16 : compact ? 22 : BLACK_KEY_WIDTH) * scale;
   const wkH = (micro ? 58 : compact ? 90 : WHITE_KEY_HEIGHT) * scale;
@@ -72,10 +92,10 @@ export default function ChordKeyboard({ name, notes, color, description, compact
       </p>
 
       {/* Piano keyboard */}
-      <div className="flex justify-center">
+      <div className="flex justify-center" style={{ overflow: "visible" }}>
         <div
           className="relative"
-          style={{ width: totalWidth, height: wkH }}
+          style={{ width: totalWidth, height: wkH, overflow: "visible" }}
         >
           {/* White keys */}
           {WHITE_NOTES.map((note) => {
@@ -86,6 +106,7 @@ export default function ChordKeyboard({ name, notes, color, description, compact
                 key={note}
                 className="absolute top-0 flex items-end justify-center rounded-b-md transition-all duration-200"
                 style={{
+                  overflow: "visible",
                   left: whiteIndex * wkW + 1,
                   width: wkW - 2,
                   height: wkH,
@@ -100,6 +121,34 @@ export default function ChordKeyboard({ name, notes, color, description, compact
                   paddingBottom: 8 * scale,
                 }}
               >
+                {highlighted && showKeyPressAnimation && (
+                  <div
+                    className="absolute top-0 left-0 right-0 overflow-visible pointer-events-none"
+                    style={{ height: 1, zIndex: 10 }}
+                  >
+                    {BUBBLE_CONFIGS.map((b, i) => (
+                      <div
+                        key={i}
+                        className="magic-piano-bubble"
+                        style={{
+                          position: "absolute",
+                          top: 0,
+                          left: "50%",
+                          width: 10 * b.size,
+                          height: 10 * b.size,
+                          borderRadius: "50%",
+                          background: `radial-gradient(circle at 30% 30%, ${bioluminescentColor(color)}, ${color}88 50%, ${color}22 100%)`,
+                          boxShadow: `0 0 12px ${color}66, 0 0 6px ${bioluminescentColor(color)}`,
+                          animation: "magic-piano-rise 1.2s ease-out infinite",
+                          animationDelay: `${b.delay}s`,
+                          animationFillMode: "both",
+                          ["--rise" as string]: `${b.rise}px`,
+                          ["--drift" as string]: `${b.drift}px`,
+                        }}
+                      />
+                    ))}
+                  </div>
+                )}
                 {highlighted && (
                   <span
                     className="font-bold"
@@ -122,6 +171,7 @@ export default function ChordKeyboard({ name, notes, color, description, compact
                 key={note}
                 className="absolute top-0 flex items-end justify-center rounded-b transition-all duration-200"
                 style={{
+                  overflow: "visible",
                   left,
                   width: bkW,
                   height: bkH,
@@ -136,6 +186,34 @@ export default function ChordKeyboard({ name, notes, color, description, compact
                   paddingBottom: 6 * scale,
                 }}
               >
+                {highlighted && showKeyPressAnimation && (
+                  <div
+                    className="absolute top-0 left-0 right-0 overflow-visible pointer-events-none"
+                    style={{ height: 1, zIndex: 10 }}
+                  >
+                    {BUBBLE_CONFIGS.map((b, i) => (
+                      <div
+                        key={i}
+                        className="magic-piano-bubble"
+                        style={{
+                          position: "absolute",
+                          top: 0,
+                          left: "50%",
+                          width: 8 * b.size,
+                          height: 8 * b.size,
+                          borderRadius: "50%",
+                          background: `radial-gradient(circle at 30% 30%, ${bioluminescentColor(color)}, ${color}aa 50%, ${color}33 100%)`,
+                          boxShadow: `0 0 10px ${color}88, 0 0 4px ${bioluminescentColor(color)}`,
+                          animation: "magic-piano-rise 1s ease-out infinite",
+                          animationDelay: `${b.delay}s`,
+                          animationFillMode: "both",
+                          ["--rise" as string]: `${b.rise * 0.8}px`,
+                          ["--drift" as string]: `${b.drift}px`,
+                        }}
+                      />
+                    ))}
+                  </div>
+                )}
                 {highlighted && (
                   <span className="font-bold text-white drop-shadow-sm" style={{ fontSize: 11 * scale }}>
                     {NOTE_DISPLAY[note]}
