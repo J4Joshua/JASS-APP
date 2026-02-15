@@ -7,18 +7,42 @@ Run: python backend/pianomidi/ws_server.py
 """
 
 import asyncio
+import base64
+import io
 import json
 import os
+import re
 import sys
+import tempfile
 import threading
+import time
 import uuid
 from dataclasses import dataclass, asdict
 from pathlib import Path
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 import uvicorn
 from perplexity import Perplexity
 from dotenv import load_dotenv
+
+try:
+    from claude_code_sdk import query, ClaudeCodeOptions
+    CLAUDE_SDK_AVAILABLE = True
+except ImportError:
+    CLAUDE_SDK_AVAILABLE = False
+
+try:
+    from midiutil import MIDIFile
+    MIDIUTIL_AVAILABLE = True
+except ImportError:
+    MIDIUTIL_AVAILABLE = False
+
+try:
+    import pygame
+    PYGAME_AVAILABLE = True
+except ImportError:
+    PYGAME_AVAILABLE = False
 
 load_dotenv()
 
@@ -609,6 +633,163 @@ async def recommend_songs(filename: str):
         traceback.print_exc(file=sys.stderr)
         return {"error": str(e), "status": "failed"}
 
+
+# --- Create Song (Claude SDK + MIDI generation) ---
+
+class CreateSongRequest(BaseModel):
+    chords: list[str]
+
+
+def play_midi_background(midi_bytes: bytes) -> None:
+    """Write MIDI bytes to a temp file, play via pygame, then clean up."""
+    tmp = tempfile.NamedTemporaryFile(suffix=".mid", delete=False)
+    try:
+        tmp.write(midi_bytes)
+        tmp.close()
+        pygame.mixer.music.load(tmp.name)
+        pygame.mixer.music.play()
+        while pygame.mixer.music.get_busy():
+            time.sleep(0.1)
+    except Exception as e:
+        print(f"[play_midi] Error: {e}", file=sys.stderr)
+    finally:
+        try:
+            os.unlink(tmp.name)
+        except OSError:
+            pass
+
+
+def generate_midi_from_bars(bars: list) -> bytes:
+    """Convert structured bar data (from Claude) into a MIDI file returned as bytes."""
+    midi = MIDIFile(3)  # 3 tracks: melody, chords, bass
+    tempo = 120
+    for track in range(3):
+        midi.addTempo(track, 0, tempo)
+    midi.addTrackName(0, 0, "Melody")
+    midi.addTrackName(1, 0, "Chords")
+    midi.addTrackName(2, 0, "Bass")
+
+    for bar_idx, bar in enumerate(bars):
+        bar_start = bar_idx * 4  # 4 beats per bar
+
+        # Chord voicing – whole notes
+        for note in bar.get("chord_notes", []):
+            midi.addNote(1, 0, int(note), bar_start, 4, 80)
+
+        # Bass note – whole note
+        bass = bar.get("bass_note")
+        if bass is not None:
+            midi.addNote(2, 0, int(bass), bar_start, 4, 90)
+
+        # Melody notes
+        for mn in bar.get("melody_notes", []):
+            midi.addNote(
+                0, 0,
+                int(mn["pitch"]),
+                bar_start + float(mn["start"]),
+                float(mn["duration"]),
+                100,
+            )
+
+    buf = io.BytesIO()
+    midi.writeFile(buf)
+    return buf.getvalue()
+
+
+@app.post("/generate-track")
+async def create_song(req: CreateSongRequest):
+    """Generate an 8-bar jazz MIDI file from a list of chords using the Claude Code SDK."""
+    if not CLAUDE_SDK_AVAILABLE:
+        return {"error": "claude-code-sdk is not installed", "status": "failed"}
+    if not MIDIUTIL_AVAILABLE:
+        return {"error": "midiutil is not installed", "status": "failed"}
+
+    chords = req.chords
+    if not chords:
+        return {"error": "No chords provided", "status": "failed"}
+
+    chord_list = ", ".join(chords)
+    prompt = (
+        f"You are a world-class bebop jazz player in the style of Chad Baker. "
+        f"Given these chords from a session: {chord_list}\n\n"
+        "Create an 8-bar jazz arrangement that SWINGS HARD. Cycle through the provided chords to fill 8 bars.\n"
+        "Return ONLY valid JSON (no markdown fences, no explanation, no extra text) with this exact structure:\n"
+        "{\n"
+        '  "abc_notation": "X:1\\nT:Jazz Session\\nM:4/4\\nL:1/8\\nK:C\\n...",\n'
+        '  "bars": [\n'
+        "    {\n"
+        '      "chord_name": "Dm7",\n'
+        '      "chord_notes": [62, 65, 69, 72],\n'
+        '      "bass_note": 38,\n'
+        '      "melody_notes": [\n'
+        '        {"pitch": 74, "start": 0.0, "duration": 1.0},\n'
+        '        {"pitch": 72, "start": 1.0, "duration": 0.5}\n'
+        "      ]\n"
+        "    }\n"
+        "  ]\n"
+        "}\n\n"
+        "Rules:\n"
+        "- MIDI note numbers: 60 = middle C (C4)\n"
+        "- chord_notes: use rich jazz voicings — drop-2, rootless, shell voicings with 7ths, 9ths, 13ths. Range 55-72. "
+        "Avoid plain triads; every chord should have at least a 7th.\n"
+        "- bass_note: walking bass line, not just roots — use approach tones, chromatic passing notes, and 5ths. Range 36-48.\n"
+        "- melody_notes: 4-8 notes per bar. Use swing 8th-note feel (long-short pairs), bebop scales, "
+        "chromatic enclosures, approach patterns, and blue notes (b3, b5, b7). Mix syncopation with on-beat accents. "
+        "Include occasional triplet rhythms (duration 0.33). Range 60-84.\n"
+        "- Vary rhythmic density: some bars dense and busy, others spacious with longer tones\n"
+        "- Use voice leading between bars — melody notes should connect smoothly\n"
+        "- abc_notation: complete ABC notation of the melody line\n"
+    )
+
+    try:
+        print(f"[create_song] Calling Claude SDK with chords: {chord_list}", file=sys.stderr)
+        response_text = ""
+        async for message in query(
+            prompt=prompt,
+            options=ClaudeCodeOptions(max_turns=1),
+        ):
+            if hasattr(message, "content"):
+                for block in message.content:
+                    if hasattr(block, "text"):
+                        response_text += block.text
+
+        print(f"[create_song] Raw response length: {len(response_text)}", file=sys.stderr)
+
+        # Extract JSON from response (Claude may wrap it in text)
+        json_match = re.search(r"\{[\s\S]*\}", response_text)
+        if not json_match:
+            return {"error": "Could not parse JSON from Claude response", "status": "failed"}
+
+        data = json.loads(json_match.group())
+        bars = data.get("bars", [])
+        abc_notation = data.get("abc_notation", "")
+
+        if not bars:
+            return {"error": "Claude returned no bars", "status": "failed"}
+
+        # Generate MIDI
+        midi_bytes = generate_midi_from_bars(bars)
+        midi_b64 = base64.b64encode(midi_bytes).decode()
+
+        print(f"[create_song] Generated MIDI: {len(midi_bytes)} bytes, {len(bars)} bars", file=sys.stderr)
+
+        # Auto-play MIDI in background thread
+        if PYGAME_AVAILABLE:
+            asyncio.create_task(asyncio.to_thread(play_midi_background, midi_bytes))
+
+        return {
+            "status": "success",
+            "abc_notation": abc_notation,
+            "midi_base64": midi_b64,
+            "bars": bars,
+        }
+    except Exception as e:
+        print(f"[create_song] Error: {e}", file=sys.stderr)
+        import traceback
+        traceback.print_exc(file=sys.stderr)
+        return {"error": str(e), "status": "failed"}
+
+
 @app.websocket("/ws")
 async def ws_endpoint(ws: WebSocket):
     global current_difficulty
@@ -686,6 +867,14 @@ async def startup():
             print(f"[ws] Spotify credentials not found (SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET)", file=sys.stderr)
     except Exception as e:
         print(f"[ws] Spotify client init failed: {e}", file=sys.stderr)
+
+    # Initialize pygame mixer for MIDI playback
+    if PYGAME_AVAILABLE:
+        try:
+            pygame.mixer.init()
+            print("[ws] pygame mixer initialized", file=sys.stderr)
+        except Exception as e:
+            print(f"[ws] pygame mixer init failed: {e}", file=sys.stderr)
 
     # start the chord detection worker
     asyncio.create_task(chord_worker())

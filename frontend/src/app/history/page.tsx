@@ -78,6 +78,9 @@ export default function History() {
   const [isGeneratingTrack, setIsGeneratingTrack] = useState(false);
   const [generateTrackError, setGenerateTrackError] = useState<string | null>(null);
   const [generateTrackSuccess, setGenerateTrackSuccess] = useState<string | null>(null);
+  const [isCreatingSong, setIsCreatingSong] = useState(false);
+  const [songMidiBase64, setSongMidiBase64] = useState<string | null>(null);
+  const [createSongError, setCreateSongError] = useState<string | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
@@ -102,6 +105,8 @@ export default function History() {
       setRecommendedSongs([]);
       setSongsError(null);
       setChordProgression(null);
+      setSongMidiBase64(null);
+      setCreateSongError(null);
     } catch (err) {
       console.error("Failed to load session:", err);
     }
@@ -185,6 +190,61 @@ export default function History() {
       setIsGeneratingTrack(false);
     }
   }
+
+  function getPlayedChords(): string[] {
+    if (!selectedSession) return [];
+    const sourceNodeIds = new Set(selectedSession.relations.map((r) => r.source_node));
+    return selectedSession.nodes
+      .filter((n) => sourceNodeIds.has(n.uuid))
+      .sort((a, b) => a.depth - b.depth)
+      .map((n) => n.name);
+  }
+
+  async function createSong() {
+    const chords = getPlayedChords();
+    if (chords.length === 0) {
+      setCreateSongError("No played chords found in this session");
+      return;
+    }
+
+    setIsCreatingSong(true);
+    setCreateSongError(null);
+    setSongMidiBase64(null);
+
+    try {
+      const response = await fetch("http://localhost:8000/create-song", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chords }),
+      });
+      const data = await response.json();
+
+      if (data.error) {
+        setCreateSongError(data.error);
+      } else {
+        setSongMidiBase64(data.midi_base64);
+      }
+    } catch (err) {
+      setCreateSongError(err instanceof Error ? err.message : "Failed to create song");
+    } finally {
+      setIsCreatingSong(false);
+    }
+  }
+
+  function downloadMidi() {
+    if (!songMidiBase64) return;
+    const bytes = atob(songMidiBase64);
+    const arr = new Uint8Array(bytes.length);
+    for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+    const blob = new Blob([arr], { type: "audio/midi" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `jazz-song-${Date.now()}.mid`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
 
   function connect() {
     if (wsRef.current) {
@@ -476,17 +536,42 @@ export default function History() {
                   <div>
                     <h3 className="text-xs uppercase tracking-wide" style={{ color: "#7c6c8c" }}>Similar Songs</h3>
                   </div>
-                  <button
-                    onClick={fetchRecommendedSongs}
-                    disabled={isLoadingSongs}
-                    className="px-3 py-1 rounded-lg text-xs font-medium text-white transition-all hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed"
-                    style={{
-                      background: "linear-gradient(160deg, #9080d8 0%, #7868c0 100%)",
-                      boxShadow: "0 2px 8px rgba(120, 104, 192, 0.35), inset 0 1px 0 rgba(255,255,255,0.2)",
-                    }}
-                  >
-                    {isLoadingSongs ? "Loading..." : "Get Recommendations"}
-                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={fetchRecommendedSongs}
+                      disabled={isLoadingSongs}
+                      className="px-3 py-1 rounded-lg text-xs font-medium text-white transition-all hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed"
+                      style={{
+                        background: "linear-gradient(160deg, #9080d8 0%, #7868c0 100%)",
+                        boxShadow: "0 2px 8px rgba(120, 104, 192, 0.35), inset 0 1px 0 rgba(255,255,255,0.2)",
+                      }}
+                    >
+                      {isLoadingSongs ? "Loading..." : "Get Recommendations"}
+                    </button>
+                    <button
+                      onClick={createSong}
+                      disabled={isCreatingSong}
+                      className="px-3 py-1 rounded-lg text-xs font-medium text-white transition-all hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed"
+                      style={{
+                        background: "linear-gradient(160deg, #d89080 0%, #c07868 100%)",
+                        boxShadow: "0 2px 8px rgba(192, 120, 104, 0.35), inset 0 1px 0 rgba(255,255,255,0.2)",
+                      }}
+                    >
+                      {isCreatingSong ? "Creating..." : "Create Song"}
+                    </button>
+                    {songMidiBase64 && (
+                      <button
+                        onClick={downloadMidi}
+                        className="px-3 py-1 rounded-lg text-xs font-medium text-white transition-all hover:brightness-110"
+                        style={{
+                          background: "linear-gradient(160deg, #80d890 0%, #68c078 100%)",
+                          boxShadow: "0 2px 8px rgba(104, 192, 120, 0.35), inset 0 1px 0 rgba(255,255,255,0.2)",
+                        }}
+                      >
+                        Download MIDI
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 {chordProgression && (
@@ -497,6 +582,10 @@ export default function History() {
 
                 {songsError && (
                   <p className="text-xs mb-3 text-red-500">{songsError}</p>
+                )}
+
+                {createSongError && (
+                  <p className="text-xs mb-3 text-red-500">{createSongError}</p>
                 )}
 
                 {recommendedSongs.length > 0 ? (
