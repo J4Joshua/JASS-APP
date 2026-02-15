@@ -128,56 +128,6 @@ export default function History() {
     };
   }, []);
 
-  function connect() {
-    if (wsRef.current) {
-      wsRef.current.close();
-    }
-    setStatus("connecting");
-
-    const ws = new WebSocket("ws://localhost:8000/ws");
-    wsRef.current = ws;
-
-    ws.onopen = () => {
-      setStatus("connected");
-    };
-
-    ws.onmessage = (e) => {
-      if (!isRecording) return;
-      try {
-        const data: ChordMsg = JSON.parse(e.data);
-        if (data.type === "chord") {
-          setChordHistory((prev) => [
-            ...prev,
-            {
-              timestamp: Date.now(),
-              chord: data.chord,
-              suggestions: data.suggestions,
-            },
-          ]);
-        }
-      } catch (err) {
-        console.error("Failed to parse message:", err);
-      }
-    };
-
-    ws.onerror = () => {
-      setStatus("disconnected");
-    };
-
-    ws.onclose = () => {
-      setStatus("disconnected");
-    };
-  }
-
-  useEffect(() => {
-    connect();
-    return () => {
-      if (wsRef.current) {
-        wsRef.current.close();
-      }
-    };
-  }, []);
-
   const exportJSON = () => {
     const export_data = {
       recorded_at: new Date().toISOString(),
