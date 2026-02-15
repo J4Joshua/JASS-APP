@@ -59,7 +59,7 @@ def suggest_chords(
     flats: bool = False,
     include_aliases: bool = False,
     min_notes: int | None = 3,
-    max_notes: int | None = 5,
+    max_notes: int | None = 4,
     d3_function_weights: Mapping[str, float] | None = None,
 ) -> dict[str, Any]:
     """Suggest next chords.

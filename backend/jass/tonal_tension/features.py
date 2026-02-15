@@ -13,7 +13,7 @@ from .theory import function_prototypes, key_tis
 _D3_FUNCTION_WEIGHTS: dict[str, float] = {
     # Keys must match `function_prototypes(...)`: "tonic", "subdominant", "dominant".
     # Larger weight => distance-from-that-function matters more in `d3`.
-    "tonic": 40,
+    "tonic": 1.3,
     "subdominant": 1.0,
     "dominant": 1.2,
 }
