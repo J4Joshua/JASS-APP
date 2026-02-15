@@ -15,6 +15,11 @@ function chromaToNotes(chroma: number[]): string[] {
   return NOTE_NAMES.filter((_, i) => chroma[i] === 1);
 }
 
+function chromaKey(chroma: number[]): string {
+  if (!chroma || chroma.length !== 12) return "";
+  return chroma.join(",");
+}
+
 type Node = {
   uuid: string;
   name: string;
@@ -335,26 +340,26 @@ export default function History() {
   const statusDotColor =
     status === "connected" ? "#7868c0" : status === "connecting" ? "#a890c8" : "#a898a8";
 
-  // Deduplicate nodes: merge nodes with same name and depth
+  // Deduplicate nodes: merge nodes with same chroma and depth
   const deduplicatedNodes = selectedSession
     ? (() => {
-        const nodesByDepthAndName = new Map<string, Node>();
+        const nodesByDepthAndChroma = new Map<string, Node>();
         const uuidMapping = new Map<string, string>(); // old UUID -> canonical UUID
-        
+
         for (const node of selectedSession.nodes) {
-          const key = `${node.depth}:${node.name}`;
-          if (!nodesByDepthAndName.has(key)) {
-            nodesByDepthAndName.set(key, node);
+          const key = `${node.depth}:${chromaKey(node.chroma)}`;
+          if (!nodesByDepthAndChroma.has(key)) {
+            nodesByDepthAndChroma.set(key, node);
             uuidMapping.set(node.uuid, node.uuid); // First occurrence is canonical
           } else {
             // Map this duplicate to the canonical UUID
-            const canonical = nodesByDepthAndName.get(key)!;
+            const canonical = nodesByDepthAndChroma.get(key)!;
             uuidMapping.set(node.uuid, canonical.uuid);
           }
         }
-        
+
         return {
-          nodes: Array.from(nodesByDepthAndName.values()),
+          nodes: Array.from(nodesByDepthAndChroma.values()),
           uuidMapping
         };
       })()
@@ -400,7 +405,7 @@ export default function History() {
       .map((uuid) => deduplicatedNodes.nodes.find((n) => n.uuid === uuid))
       .filter((n): n is Node => n != null);
     const nextDeduped = targetNodes.filter(
-      (n, i, arr) => arr.findIndex((x) => x.name === n.name) === i
+      (n, i, arr) => arr.findIndex((x) => chromaKey(x.chroma) === chromaKey(n.chroma)) === i
     );
 
     // Previous: path of chords that led TO this node (incoming edges, then recurse)
@@ -421,7 +426,7 @@ export default function History() {
           }
         }
       }
-      const deduped = nextLayer.filter((n, i, arr) => arr.findIndex((x) => x.name === n.name) === i);
+      const deduped = nextLayer.filter((n, i, arr) => arr.findIndex((x) => chromaKey(x.chroma) === chromaKey(n.chroma)) === i);
       previousNodes.push(...deduped.sort((a, b) => b.depth - a.depth)); // higher depth = more recent
       layer = nextLayer;
       if (previousNodes.length >= MAX_PREV) break;
