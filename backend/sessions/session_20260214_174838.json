@@ -1,0 +1,482 @@
+{
+  "timestamp": "20260214_174838",
+  "nodes": [
+    {
+      "uuid": "94c5c698-9e57-4a39-a162-716c03eceba5",
+      "name": "A5/E",
+      "depth": 1,
+      "chroma": [
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0
+      ]
+    },
+    {
+      "uuid": "4d37e208-362d-4162-9824-76f5804a67c2",
+      "name": "Asus2",
+      "depth": 2,
+      "chroma": [
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        1
+      ]
+    },
+    {
+      "uuid": "8311d81e-e4df-427c-aca6-563f45c046bf",
+      "name": "Asus4",
+      "depth": 2,
+      "chroma": [
+        0,
+        0,
+        1,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0
+      ]
+    },
+    {
+      "uuid": "c4297083-2970-48e1-96d3-d5ec183521cd",
+      "name": "Bm11",
+      "depth": 2,
+      "chroma": [
+        0,
+        0,
+        1,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        1
+      ]
+    },
+    {
+      "uuid": "0d528538-fe72-48a8-aa58-c1120f860e94",
+      "name": "G5/D",
+      "depth": 2,
+      "chroma": [
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "uuid": "23730395-85e8-47e9-b925-02b05f92b836",
+      "name": "Csus2",
+      "depth": 3,
+      "chroma": [
+        1,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "uuid": "cb8864b0-2fb4-4ad6-a01a-13d3008802e9",
+      "name": "Dm11",
+      "depth": 3,
+      "chroma": [
+        1,
+        0,
+        1,
+        0,
+        0,
+        1,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "uuid": "23e2f1d0-6662-4a7a-ab58-5a36c4bd5a3c",
+      "name": "Dsus4",
+      "depth": 3,
+      "chroma": [
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        1,
+        0,
+        0
+      ]
+    },
+    {
+      "uuid": "52d1c830-dfe2-448e-a5e8-f71312818027",
+      "name": "D5",
+      "depth": 3,
+      "chroma": [
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0
+      ]
+    },
+    {
+      "uuid": "6de395df-6db1-45b5-9852-c3e7638c05cd",
+      "name": "Asus4",
+      "depth": 4,
+      "chroma": [
+        0,
+        0,
+        1,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0
+      ]
+    },
+    {
+      "uuid": "25ecd86d-dda7-4bf6-91e8-e0ad4f04b1fc",
+      "name": "Bm11",
+      "depth": 4,
+      "chroma": [
+        0,
+        0,
+        1,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        1
+      ]
+    },
+    {
+      "uuid": "b2300eec-1abc-4aa9-89ed-4e5e6008c422",
+      "name": "Dsus4",
+      "depth": 4,
+      "chroma": [
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        1,
+        0,
+        0
+      ]
+    },
+    {
+      "uuid": "db01621e-c446-4528-8cc9-6bae8ed4c87a",
+      "name": "F5/C",
+      "depth": 4,
+      "chroma": [
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "uuid": "08a0e50c-490f-4f59-b783-cc4ccaf2202f",
+      "name": "Csus4",
+      "depth": 5,
+      "chroma": [
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "uuid": "577d5131-68a9-4aa7-a72f-067c3db5ee8d",
+      "name": "Fsus4",
+      "depth": 5,
+      "chroma": [
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0
+      ]
+    },
+    {
+      "uuid": "01e53af2-8343-4789-a386-03fc3ca56e29",
+      "name": "F5/D",
+      "depth": 5,
+      "chroma": [
+        1,
+        0,
+        1,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "uuid": "e2c11db6-3092-4051-8b7e-6acdbc11f863",
+      "name": "D5",
+      "depth": 5,
+      "chroma": [
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0
+      ]
+    },
+    {
+      "uuid": "74cc944b-8127-4df6-a629-78b79cd2e4d0",
+      "name": "Asus4",
+      "depth": 6,
+      "chroma": [
+        0,
+        0,
+        1,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0
+      ]
+    },
+    {
+      "uuid": "e37a38b7-9d2b-44d2-bede-eafeda9cd73f",
+      "name": "Bm11",
+      "depth": 6,
+      "chroma": [
+        0,
+        0,
+        1,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        1
+      ]
+    },
+    {
+      "uuid": "ffb8fabe-24a3-4a9d-bac5-bd851f76be2f",
+      "name": "Dsus4",
+      "depth": 6,
+      "chroma": [
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        1,
+        0,
+        0
+      ]
+    },
+    {
+      "uuid": "19a281cb-280b-4c42-a90f-e5831f718f97",
+      "name": "Ano5/C#",
+      "depth": 6,
+      "chroma": [
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0
+      ]
+    }
+  ],
+  "relations": [
+    {
+      "uuid": "f05c6654-cc0b-4dbe-9233-d8bd2e2ae660",
+      "source_node": "94c5c698-9e57-4a39-a162-716c03eceba5",
+      "target_node": "4d37e208-362d-4162-9824-76f5804a67c2"
+    },
+    {
+      "uuid": "8813514d-9848-47a6-ace9-37be0464abdf",
+      "source_node": "94c5c698-9e57-4a39-a162-716c03eceba5",
+      "target_node": "8311d81e-e4df-427c-aca6-563f45c046bf"
+    },
+    {
+      "uuid": "3107b756-ef4e-4e22-854d-761d50c8cd98",
+      "source_node": "94c5c698-9e57-4a39-a162-716c03eceba5",
+      "target_node": "c4297083-2970-48e1-96d3-d5ec183521cd"
+    },
+    {
+      "uuid": "bb679f21-cfbe-45e0-8b88-a38902272797",
+      "source_node": "0d528538-fe72-48a8-aa58-c1120f860e94",
+      "target_node": "23730395-85e8-47e9-b925-02b05f92b836"
+    },
+    {
+      "uuid": "c0570ea3-e23d-4cff-bd36-fc6531863c71",
+      "source_node": "0d528538-fe72-48a8-aa58-c1120f860e94",
+      "target_node": "cb8864b0-2fb4-4ad6-a01a-13d3008802e9"
+    },
+    {
+      "uuid": "a235ede8-3af7-4d43-a669-3b3428635482",
+      "source_node": "0d528538-fe72-48a8-aa58-c1120f860e94",
+      "target_node": "23e2f1d0-6662-4a7a-ab58-5a36c4bd5a3c"
+    },
+    {
+      "uuid": "10006ac1-f827-4a59-99e6-e3576332f59f",
+      "source_node": "52d1c830-dfe2-448e-a5e8-f71312818027",
+      "target_node": "6de395df-6db1-45b5-9852-c3e7638c05cd"
+    },
+    {
+      "uuid": "a41a0702-66f3-4f87-9a25-2205b2d5601c",
+      "source_node": "52d1c830-dfe2-448e-a5e8-f71312818027",
+      "target_node": "25ecd86d-dda7-4bf6-91e8-e0ad4f04b1fc"
+    },
+    {
+      "uuid": "7184361d-7baa-4c2f-8f2c-3581ca397fda",
+      "source_node": "52d1c830-dfe2-448e-a5e8-f71312818027",
+      "target_node": "b2300eec-1abc-4aa9-89ed-4e5e6008c422"
+    },
+    {
+      "uuid": "cb483405-4c4c-414c-81ae-16ef24dc15af",
+      "source_node": "db01621e-c446-4528-8cc9-6bae8ed4c87a",
+      "target_node": "08a0e50c-490f-4f59-b783-cc4ccaf2202f"
+    },
+    {
+      "uuid": "a26f4b1e-f905-4009-a1e5-619076fdc771",
+      "source_node": "db01621e-c446-4528-8cc9-6bae8ed4c87a",
+      "target_node": "577d5131-68a9-4aa7-a72f-067c3db5ee8d"
+    },
+    {
+      "uuid": "c3bb8d4a-ed15-4448-a555-ecf9e2d432e1",
+      "source_node": "db01621e-c446-4528-8cc9-6bae8ed4c87a",
+      "target_node": "01e53af2-8343-4789-a386-03fc3ca56e29"
+    },
+    {
+      "uuid": "2bf8ceff-2112-43d3-8bf8-d0ba4ab1b124",
+      "source_node": "e2c11db6-3092-4051-8b7e-6acdbc11f863",
+      "target_node": "74cc944b-8127-4df6-a629-78b79cd2e4d0"
+    },
+    {
+      "uuid": "0c71ff94-8c17-4043-beb4-fd19262f5fc8",
+      "source_node": "e2c11db6-3092-4051-8b7e-6acdbc11f863",
+      "target_node": "e37a38b7-9d2b-44d2-bede-eafeda9cd73f"
+    },
+    {
+      "uuid": "d329a588-bb0e-4de3-8928-2e76e905e7a1",
+      "source_node": "e2c11db6-3092-4051-8b7e-6acdbc11f863",
+      "target_node": "ffb8fabe-24a3-4a9d-bac5-bd851f76be2f"
+    }
+  ],
+  "total_depth": 6
+}
