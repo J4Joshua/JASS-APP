@@ -29,6 +29,9 @@ if _backend_dir not in sys.path:
 
 from jass.tis_index import TISIndex
 from jass.chord_suggestion import suggest_chords
+from jass.tonal_tension.weights import PAPER_WEIGHTS_TABLE1, PAPER_WEIGHTS_TABLE2
+from jass.tonal_tension.theory import roman_to_chord
+from constants import CURATED_SERIES
 
 app = FastAPI()
 
@@ -73,6 +76,15 @@ graph_depth: int = 0
 nodes: list[Node] = []
 relations: list[Relation] = []
 allowed_suggestions: set[tuple[int, ...]] = set()
+# Curated series state
+series_cursor: int = 0
+resolved_series: list[dict] | None = None
+
+current_difficulty: str = "easy"
+DIFFICULTY_WEIGHTS = {
+    "easy": dict(PAPER_WEIGHTS_TABLE1),
+    "hard": dict(PAPER_WEIGHTS_TABLE2),
+}
 
 
 # --- Stage 1: MIDI capture (rtmidi thread) ---
@@ -119,7 +131,7 @@ class MidiCapture:
 
 async def chord_worker():
     """Reads note snapshots from the queue, detects chords, broadcasts."""
-    global last_chroma, graph_depth, nodes, relations, allowed_suggestions
+    global last_chroma, graph_depth, nodes, relations, allowed_suggestions, series_cursor
 
     from pychord.analyzer import find_chords_from_notes
 
@@ -154,9 +166,16 @@ async def chord_worker():
 
         print(f"[chord_worker] ACCEPTED {chord_name!r}  chroma={list(chroma_key)}", file=sys.stderr)
 
+        # Advance curated series cursor if the played chord matches
+        if resolved_series and list(chroma_key) == resolved_series[series_cursor]["chroma"]:
+            print(f"[chord_worker] series match: {resolved_series[series_cursor]['name']}, advancing cursor", file=sys.stderr)
+            series_cursor = (series_cursor + 1) % len(resolved_series)
+
         # Get suggestions for accepted chord
+        weights = DIFFICULTY_WEIGHTS[current_difficulty]
+        print(f"[chord_worker] difficulty={current_difficulty}", file=sys.stderr)
         suggestions = await asyncio.to_thread(
-            _get_suggestions, chord_name, chroma
+            _get_suggestions, weights, chord_name, chroma
         )
 
         print(f"[chord_worker] suggestions: {[s['name'] for s in suggestions]}", file=sys.stderr)
@@ -210,18 +229,18 @@ async def chord_worker():
         print(f"[chord_worker] ERROR: {e}", file=sys.stderr)
         traceback.print_exc(file=sys.stderr)
 
-def _get_suggestions(chord_name: str, chroma: list[int] | None = None) -> list[dict]:
+def _get_suggestions(weights: dict[str, float], chord_name: str, chroma: list[int] | None = None) -> list[dict]:
     if tis_idx is None:
         return []
 
-    # Pick whatever 3 goals you want to compare.
-    # Commonly useful set: resolve (low tension), build (high tension), and a numeric target.
-    goals = ["resolve", "tension", 0.3]  # <- change "0.5" to whatever target you want
+    # Two TIS-based goals (resolve + tension), then the curated series chord
+    goals = ["resolve", "tension"]
 
     out: list[dict] = []
     try:
         for goal in goals:
             result = suggest_chords(
+                weights=weights,
                 chroma=chroma,
                 key="C",
                 index=tis_idx,
@@ -229,7 +248,7 @@ def _get_suggestions(chord_name: str, chroma: list[int] | None = None) -> list[d
                 goal=goal,      # different goal each call
             )
 
-            # Ensure we always append *one* item per goal to keep iterable length == 3
+            # Ensure we always append *one* item per goal
             rlist = result.get("results", []) or []
             if not rlist:
                 out.append({
@@ -254,7 +273,26 @@ def _get_suggestions(chord_name: str, chroma: list[int] | None = None) -> list[d
                 "notes": notes,
                 "chroma": bits,
                 "tension": round(float(r.get("tension", 0)), 3),
-                "goal": goal,  # include which goal produced this suggestion
+                "goal": goal,
+            })
+
+        # Append curated series chord as the 3rd suggestion
+        if resolved_series:
+            entry = resolved_series[series_cursor]
+            out.append({
+                "name": entry["name"],
+                "notes": list(entry["notes"]),
+                "chroma": list(entry["chroma"]),
+                "tension": 0.0,
+                "goal": "series",
+            })
+        else:
+            out.append({
+                "name": None,
+                "notes": [],
+                "chroma": [],
+                "tension": 0.0,
+                "goal": "series",
             })
 
         return out
@@ -309,12 +347,14 @@ def save_session() -> dict:
 
 def reset_session():
     """Reset global state for a new session."""
-    global last_chroma, graph_depth, nodes, relations, allowed_suggestions
+    global last_chroma, graph_depth, nodes, relations, allowed_suggestions, current_difficulty, series_cursor
+    current_difficulty = "easy"
     last_chroma = None
     graph_depth = 0
     nodes = []
     relations = []
     allowed_suggestions = set()
+    series_cursor = 0
     print(f"[ws] Session reset", file=sys.stderr)
 
 
@@ -571,16 +611,47 @@ async def recommend_songs(filename: str):
 
 @app.websocket("/ws")
 async def ws_endpoint(ws: WebSocket):
+    global current_difficulty
     await ws.accept()
     clients.add(ws)
     try:
         while True:
-            await ws.receive_text()
+            raw = await ws.receive_text()
+            try:
+                msg = json.loads(raw)
+                if msg.get("type") == "set_difficulty":
+                    difficulty = msg.get("difficulty", "easy")
+                    if difficulty in DIFFICULTY_WEIGHTS:
+                        current_difficulty = difficulty
+                        print(f"[ws] Difficulty set to: {difficulty}", file=sys.stderr)
+            except (json.JSONDecodeError, AttributeError):
+                pass
     except WebSocketDisconnect:
         clients.discard(ws)
 
 
 # --- Lifecycle ---
+
+def _resolve_curated_series(idx: TISIndex) -> None:
+    """Resolve the first CURATED_SERIES into concrete {name, notes, chroma} dicts."""
+    global resolved_series
+    _name, numerals = CURATED_SERIES[0]
+    name_to_row = idx.build_name_to_row()
+    result: list[dict] = []
+    for numeral in numerals:
+        chord_name = roman_to_chord(numeral, "C")
+        # Normalize: the index may store "Bm7b5" instead of "Bø7"
+        lookup_name = chord_name.replace("ø", "m7b5")
+        row = name_to_row.get(chord_name) or name_to_row.get(lookup_name)
+        if row is None:
+            print(f"[ws] series: could not find {chord_name!r} (or {lookup_name!r}) in index, skipping", file=sys.stderr)
+            continue
+        bits = idx.chroma_bits[row].tolist()
+        notes = [NOTE_NAMES[i] for i, b in enumerate(bits) if b]
+        result.append({"name": chord_name, "notes": notes, "chroma": bits})
+    resolved_series = result
+    print(f"[ws] Curated series resolved: {[c['name'] for c in result]}", file=sys.stderr)
+
 
 @app.on_event("startup")
 async def startup():
@@ -596,6 +667,9 @@ async def startup():
     except Exception as e:
         print(f"[ws] TIS index unavailable: {e}", file=sys.stderr)
 
+    # Resolve curated series into concrete chord dicts
+    if tis_idx is not None and CURATED_SERIES:
+        _resolve_curated_series(tis_idx)
     # Initialize Spotify client
     try:
         import spotipy
