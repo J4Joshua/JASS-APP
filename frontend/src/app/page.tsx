@@ -39,6 +39,7 @@ export default function Home() {
   // Live chord graph state — starts empty until user plays a chord or clicks Demo
   const [chordGraphState, setChordGraphState] = useState<ChordGraphState | null>(null);
   const [notesMap, setNotesMap] = useState<Record<string, string[]>>({});
+  /** Increments when a chord is recognized — triggers floating particle burst */
 
   const prevChordGraphStateRef = useRef<ChordGraphState | null>(null);
   useEffect(() => {
@@ -190,8 +191,6 @@ export default function Home() {
           console.log("  Notes Map:", transformedNotesMap);
 
           if (baseState && !demoModeRef.current) {
-            // New chord: add old current to front of history; only drop the oldest (tail) when over max
-            // Skip when demoMode is true so Demo state isn't overwritten by live chords
             setChordGraphState((prev) => {
               if (!prev) return baseState;
               const chordChanged =
@@ -471,80 +470,50 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 font-[family-name:var(--font-patrick-hand)]">
+    <div className="min-h-screen bg-white text-zinc-900 font-[family-name:var(--font-patrick-hand)]">
       {/* Bubble Visualization - each sphere has its keyboard directly below it */}
       <div className="relative w-full h-screen">
         <Background />
 
-        {/* Connection controls overlay — 2.5d cool pastel theme */}
-        <div
-          className="absolute top-4 left-4 z-10 flex items-center gap-3 px-4 py-2.5 rounded-xl shadow-lg"
-          style={{
-            background: 'linear-gradient(145deg, rgba(248, 244, 252, 0.92) 0%, rgba(236, 228, 248, 0.88) 100%)',
-            backdropFilter: 'blur(12px)',
-            border: '1px solid rgba(196, 184, 208, 0.5)',
-            boxShadow: `
-              0 4px 20px rgba(168, 140, 200, 0.15),
-              0 1px 3px rgba(0,0,0,0.06),
-              inset 0 1px 0 rgba(255,255,255,0.6)
-            `,
-          }}
-        >
+        {/* Connection controls overlay */}
+        <div className="connection-bar absolute top-4 left-4 z-10 flex items-center gap-3 px-4 py-2.5 rounded-2xl">
           <span
-            className="w-2.5 h-2.5 rounded-full ring-2 ring-white/60 shadow-sm"
+            className="w-2.5 h-2.5 rounded-full ring-2 ring-white/50 shadow-sm flex-shrink-0"
             style={{ backgroundColor: statusDotColor }}
           />
-          <span className="text-sm font-medium" style={{ color: '#5c4a6c' }}>{status}</span>
+          <span className="text-sm font-medium" style={{ color: "#374151" }}>
+            {status}
+          </span>
           {status === "disconnected" ? (
             <button
               onClick={connect}
-              className="px-3 py-1.5 rounded-lg text-white text-sm font-medium transition-all hover:brightness-110"
-              style={{
-                background: 'linear-gradient(160deg, #9080d8 0%, #7868c0 100%)',
-                boxShadow: '0 2px 8px rgba(120, 104, 192, 0.35), inset 0 1px 0 rgba(255,255,255,0.2)',
-              }}
+              className="connection-bar-btn px-3 py-1.5 rounded-xl text-sm font-medium"
             >
               Connect
             </button>
           ) : (
             <button
               onClick={disconnect}
-              className="px-3 py-1.5 rounded-lg text-white text-sm font-medium transition-all hover:brightness-110"
-              style={{
-                background: 'linear-gradient(160deg, #8878b0 0%, #7060a0 100%)',
-                boxShadow: '0 2px 8px rgba(112, 96, 160, 0.35), inset 0 1px 0 rgba(255,255,255,0.2)',
-              }}
+              className="connection-bar-btn px-3 py-1.5 rounded-xl text-sm font-medium"
             >
               Disconnect
             </button>
           )}
           <Link
             href="/history"
-            className="px-3 py-1.5 rounded-lg text-white text-sm font-medium transition-all hover:brightness-110"
-            style={{
-              background: 'linear-gradient(160deg, #9080d8 0%, #7868c0 100%)',
-              boxShadow: '0 2px 8px rgba(120, 104, 192, 0.35), inset 0 1px 0 rgba(255,255,255,0.2)',
-            }}
+            className="connection-bar-btn px-3 py-1.5 rounded-xl text-sm font-medium"
           >
             View History →
           </Link>
           <button
             onClick={endSession}
-            className="px-3 py-1.5 rounded-lg text-white text-sm font-medium transition-all hover:brightness-110"
-            style={{
-              background: 'linear-gradient(160deg, #9878c8 0%, #8068b0 100%)',
-              boxShadow: '0 2px 8px rgba(128, 104, 176, 0.35), inset 0 1px 0 rgba(255,255,255,0.2)',
-            }}
+            className="connection-bar-btn px-3 py-1.5 rounded-xl text-sm font-medium"
           >
             End Session
           </button>
           <button
             onClick={cycleDemo}
-            className="px-3 py-1.5 rounded-lg text-white text-sm font-medium transition-all hover:brightness-110"
-            style={{
-              background: 'linear-gradient(160deg, #a888d8 0%, #9070c8 100%)',
-              boxShadow: '0 2px 8px rgba(144, 112, 216, 0.35), inset 0 1px 0 rgba(255,255,255,0.2)',
-            }}
+            className="connection-bar-btn px-3 py-1.5 rounded-xl text-sm font-medium"
             title="Cycle chord states to test animations (no keyboard needed)"
           >
             Demo
@@ -601,10 +570,13 @@ export default function Home() {
           <div
             className="absolute top-16 left-1/2 -translate-x-1/2 z-20 px-4 py-2 rounded-lg text-sm font-medium"
             style={{
-              background: 'linear-gradient(145deg, rgba(248, 244, 252, 0.95) 0%, rgba(236, 228, 248, 0.9) 100%)',
-              border: '1px solid rgba(196, 184, 208, 0.6)',
-              color: '#5c4a6c',
-              boxShadow: '0 4px 12px rgba(168, 140, 200, 0.2)',
+              background: "rgba(255, 255, 255, 0.25)",
+              backdropFilter: "saturate(180%) blur(24px)",
+              WebkitBackdropFilter: "saturate(180%) blur(24px)",
+              border: "1px solid rgba(255, 255, 255, 0.45)",
+              color: "#374151",
+              boxShadow:
+                "0 4px 24px rgba(0, 0, 0, 0.06), 0 1px 0 rgba(255, 255, 255, 0.5) inset",
             }}
           >
             Playing from {historyBannerChord} in session
@@ -622,7 +594,7 @@ export default function Home() {
                 ? livePianoNotes
                 : keyboardHeldNotes.size > 0
                   ? midiNotesToNames(Array.from(keyboardHeldNotes))
-                  : (chord?.notes ?? [])
+                  : []
             }
           />
         </div>
@@ -630,16 +602,16 @@ export default function Home() {
 
       {/* Log */}
       <div className="p-8">
-        <h2 className="text-sm text-zinc-400 mb-2 uppercase tracking-wide">Event Log</h2>
+        <h2 className="text-sm text-zinc-500 mb-2 uppercase tracking-wide">Event Log</h2>
         <div
           ref={logRef}
-          className="bg-zinc-900 rounded-lg p-4 border border-zinc-800 h-48 overflow-y-auto text-xs font-mono"
+          className="bg-zinc-50 rounded-lg p-4 border border-zinc-200 h-48 overflow-y-auto text-xs font-mono"
         >
           {log.length === 0 ? (
-            <p className="text-zinc-600">No events yet</p>
+            <p className="text-zinc-500">No events yet</p>
           ) : (
             log.map((entry, i) => (
-              <p key={i} className="text-zinc-400">
+              <p key={i} className="text-zinc-600">
                 {entry}
               </p>
             ))

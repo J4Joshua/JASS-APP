@@ -1,6 +1,10 @@
+"use client";
+
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+
 const NOTE_DISPLAY: Record<string, string> = {
   C: "C", "C#": "C♯", Db: "D♭", D: "D", "D#": "D♯", Eb: "E♭",
-  E: "E", F: "F", "F#": "F♯", Gb: "G♭", G: "G", "G#": "G♯",
+  E: "E", F: "F", ["F#"]: "F♯", Gb: "G♭", G: "G", "G#": "G♯",
   Ab: "A♭", A: "A", "A#": "A♯", Bb: "B♭", B: "B",
 };
 
@@ -18,9 +22,37 @@ function isNoteHighlighted(note: string, notes: string[]): boolean {
   return flat ? notes.includes(flat) : false;
 }
 
+function isNoteInSet(note: string, noteSet: Set<string>): boolean {
+  if (noteSet.has(note)) return true;
+  const flat = Object.entries(FLAT_TO_SHARP).find(([, s]) => s === note)?.[0];
+  return flat ? noteSet.has(flat) : false;
+}
+
 const BLACK_KEY_POSITIONS: Record<string, number> = {
   "C#": 0, "D#": 1, "F#": 3, "G#": 4, "A#": 5,
 };
+
+/** Bioluminescent blend — mix chord color with cyan "blue tears" */
+function bioluminescentColor(hex: string): string {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  const blend = (a: number, b: number, t: number) => Math.round(a * (1 - t) + b * t);
+  return `rgb(${blend(r, 100, 0.3)}, ${blend(g, 200, 0.3)}, ${blend(b, 255, 0.2)})`;
+}
+
+/** Rising bubble particles for magic piano effect */
+const BUBBLE_CONFIGS = [
+  { rise: -70, drift: 4, delay: 0, size: 0.9 },
+  { rise: -90, drift: -6, delay: 0.12, size: 0.6 },
+  { rise: -60, drift: -2, delay: 0.24, size: 0.7 },
+  { rise: -85, drift: 5, delay: 0.36, size: 0.5 },
+  { rise: -75, drift: -4, delay: 0.18, size: 0.65 },
+];
+
+const TRAIL_DURATION_MS = 1600;
+const BUBBLE_DURATION_WHITE = 1.2;
+const BUBBLE_DURATION_BLACK = 1;
 
 const WHITE_KEY_WIDTH = 38;
 const BLACK_KEY_WIDTH = 24;
@@ -32,17 +64,60 @@ interface ChordKeyboardProps {
   notes: string[];
   color: string;
   description: string;
-  /** Compact mode for embedding below graph nodes */
   compact?: boolean;
-  /** No card/rectangle - just the piano, no background or border */
   minimal?: boolean;
-  /** Micro size for embedding below small spheres (next chords) */
   micro?: boolean;
-  /** Scale factor (e.g. 1.2 = 20% bigger) */
   scale?: number;
+  showKeyPressAnimation?: boolean;
+  hideName?: boolean;
 }
 
-export default function ChordKeyboard({ name, notes, color, description, compact = false, minimal = false, micro = false, scale = 1 }: ChordKeyboardProps) {
+export default function ChordKeyboard({ name, notes, color, description, compact = false, minimal = false, micro = false, scale = 1, showKeyPressAnimation = false, hideName = false }: ChordKeyboardProps) {
+  const [trailingNotes, setTrailingNotes] = useState<Set<string>>(new Set());
+  const prevNotesRef = useRef<string[]>([]);
+  const trailTimeoutsRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const justReleasedRef = useRef<Set<string>>(new Set());
+
+  const prev = prevNotesRef.current;
+  const released = prev.filter((n) => !notes.includes(n));
+  if (showKeyPressAnimation && released.length > 0) {
+    justReleasedRef.current = new Set(released);
+  }
+  prevNotesRef.current = notes;
+
+  useLayoutEffect(() => {
+    if (!showKeyPressAnimation) return;
+    if (released.length === 0) return;
+    released.forEach((n) => {
+      if (trailTimeoutsRef.current.has(n)) return;
+      setTrailingNotes((t) => new Set(t).add(n));
+      justReleasedRef.current.delete(n);
+      const id = setTimeout(() => {
+        setTrailingNotes((old) => {
+          const next = new Set(old);
+          next.delete(n);
+          return next;
+        });
+        trailTimeoutsRef.current.delete(n);
+      }, TRAIL_DURATION_MS);
+      trailTimeoutsRef.current.set(n, id);
+    });
+  }, [notes, showKeyPressAnimation]);
+
+  useEffect(() => () => {
+    trailTimeoutsRef.current.forEach((id) => clearTimeout(id));
+    trailTimeoutsRef.current.clear();
+  }, []);
+
+  const showBubbles = (note: string) =>
+    showKeyPressAnimation &&
+    (isNoteHighlighted(note, notes) ||
+      isNoteInSet(note, trailingNotes) ||
+      isNoteInSet(note, justReleasedRef.current));
+
+  const isTrailing = (note: string) =>
+    isNoteInSet(note, trailingNotes) || isNoteInSet(note, justReleasedRef.current);
+
   const wkW = (micro ? 26 : compact ? 36 : WHITE_KEY_WIDTH) * scale;
   const bkW = (micro ? 16 : compact ? 22 : BLACK_KEY_WIDTH) * scale;
   const wkH = (micro ? 58 : compact ? 90 : WHITE_KEY_HEIGHT) * scale;
@@ -63,21 +138,17 @@ export default function ChordKeyboard({ name, notes, color, description, compact
             }),
       }}
     >
-      {/* Chord name */}
-      <p
-        className="font-extrabold tracking-tight text-center"
-        style={{ color, fontSize: (micro ? 13 : compact ? 18 : 22) * scale, marginBottom: (micro ? 3 : compact ? 8 : 16) * scale }}
-      >
-        {name}
-      </p>
-
-      {/* Piano keyboard */}
-      <div className="flex justify-center">
-        <div
-          className="relative"
-          style={{ width: totalWidth, height: wkH }}
+      {!hideName && (
+        <p
+          className="font-extrabold tracking-tight text-center"
+          style={{ color, fontSize: (micro ? 13 : compact ? 18 : 22) * scale, marginBottom: (micro ? 3 : compact ? 8 : 16) * scale }}
         >
-          {/* White keys */}
+          {name}
+        </p>
+      )}
+
+      <div className="flex justify-center" style={{ overflow: "visible" }}>
+        <div className="relative" style={{ width: totalWidth, height: wkH, overflow: "visible" }}>
           {WHITE_NOTES.map((note) => {
             const highlighted = isNoteHighlighted(note, notes);
             const whiteIndex = WHITE_NOTES.indexOf(note);
@@ -86,6 +157,7 @@ export default function ChordKeyboard({ name, notes, color, description, compact
                 key={note}
                 className="absolute top-0 flex items-end justify-center rounded-b-md transition-all duration-200"
                 style={{
+                  overflow: "visible",
                   left: whiteIndex * wkW + 1,
                   width: wkW - 2,
                   height: wkH,
@@ -100,11 +172,36 @@ export default function ChordKeyboard({ name, notes, color, description, compact
                   paddingBottom: 8 * scale,
                 }}
               >
+                {showBubbles(note) && (
+                  <div className="absolute top-0 left-0 right-0 overflow-visible pointer-events-none" style={{ height: 1, zIndex: 10 }}>
+                    {BUBBLE_CONFIGS.map((b, i) => (
+                      <div
+                        key={i}
+                        className="magic-piano-bubble"
+                        style={{
+                          position: "absolute",
+                          top: 0,
+                          left: "50%",
+                          width: 10 * b.size,
+                          height: 10 * b.size,
+                          borderRadius: "50%",
+                          background: `radial-gradient(circle at 30% 30%, ${bioluminescentColor(color)}, ${color}88 50%, ${color}22 100%)`,
+                          boxShadow: `0 0 12px ${color}66, 0 0 6px ${bioluminescentColor(color)}`,
+                          animationName: "magic-piano-rise",
+                          animationDuration: `${BUBBLE_DURATION_WHITE}s`,
+                          animationTimingFunction: "ease-out",
+                          animationDelay: `${b.delay}s`,
+                          animationIterationCount: isTrailing(note) ? 1 : "infinite",
+                          animationFillMode: isTrailing(note) ? "forwards" : "both",
+                          ["--rise" as string]: `${b.rise}px`,
+                          ["--drift" as string]: `${b.drift}px`,
+                        }}
+                      />
+                    ))}
+                  </div>
+                )}
                 {highlighted && (
-                  <span
-                    className="font-bold"
-                    style={{ color, fontSize: 13 * scale }}
-                  >
+                  <span className="font-bold" style={{ color, fontSize: 13 * scale }}>
                     {NOTE_DISPLAY[note]}
                   </span>
                 )}
@@ -112,7 +209,6 @@ export default function ChordKeyboard({ name, notes, color, description, compact
             );
           })}
 
-          {/* Black keys */}
           {BLACK_NOTES.map((note) => {
             const highlighted = isNoteHighlighted(note, notes);
             const whitesBefore = BLACK_KEY_POSITIONS[note];
@@ -122,6 +218,7 @@ export default function ChordKeyboard({ name, notes, color, description, compact
                 key={note}
                 className="absolute top-0 flex items-end justify-center rounded-b transition-all duration-200"
                 style={{
+                  overflow: "visible",
                   left,
                   width: bkW,
                   height: bkH,
@@ -136,6 +233,34 @@ export default function ChordKeyboard({ name, notes, color, description, compact
                   paddingBottom: 6 * scale,
                 }}
               >
+                {showBubbles(note) && (
+                  <div className="absolute top-0 left-0 right-0 overflow-visible pointer-events-none" style={{ height: 1, zIndex: 10 }}>
+                    {BUBBLE_CONFIGS.map((b, i) => (
+                      <div
+                        key={i}
+                        className="magic-piano-bubble"
+                        style={{
+                          position: "absolute",
+                          top: 0,
+                          left: "50%",
+                          width: 8 * b.size,
+                          height: 8 * b.size,
+                          borderRadius: "50%",
+                          background: `radial-gradient(circle at 30% 30%, ${bioluminescentColor(color)}, ${color}aa 50%, ${color}33 100%)`,
+                          boxShadow: `0 0 10px ${color}88, 0 0 4px ${bioluminescentColor(color)}`,
+                          animationName: "magic-piano-rise",
+                          animationDuration: `${BUBBLE_DURATION_BLACK}s`,
+                          animationTimingFunction: "ease-out",
+                          animationDelay: `${b.delay}s`,
+                          animationIterationCount: isTrailing(note) ? 1 : "infinite",
+                          animationFillMode: isTrailing(note) ? "forwards" : "both",
+                          ["--rise" as string]: `${b.rise * 0.8}px`,
+                          ["--drift" as string]: `${b.drift}px`,
+                        }}
+                      />
+                    ))}
+                  </div>
+                )}
                 {highlighted && (
                   <span className="font-bold text-white drop-shadow-sm" style={{ fontSize: 11 * scale }}>
                     {NOTE_DISPLAY[note]}
@@ -147,17 +272,12 @@ export default function ChordKeyboard({ name, notes, color, description, compact
         </div>
       </div>
 
-      {/* Note list - hide when compact or micro */}
       {!compact && !micro && (
-        <p
-          className="text-xs tracking-widest text-center mt-4"
-          style={{ color }}
-        >
+        <p className="text-xs tracking-widest text-center mt-4" style={{ color }}>
           {notes.map((n) => NOTE_DISPLAY[n] || n).join(" · ")}
         </p>
       )}
 
-      {/* Description - hide when compact or micro */}
       {!compact && !micro && (
         <p className="text-xs text-zinc-500 italic text-center mt-1">
           {description}

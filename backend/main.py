@@ -167,6 +167,10 @@ async def chord_worker():
         while not queue.empty():
             snapshot = queue.get_nowait()
 
+        # broadcast live notes immediately for real-time piano display
+        live_names = [NOTE_NAMES[n % 12] for n in sorted(snapshot)]
+        await broadcast({"type": "live_notes", "notes": live_names})
+
         # build chroma + note names
         pitch_classes = {n % 12 for n in snapshot}
         chroma = [1 if i in pitch_classes else 0 for i in range(12)]

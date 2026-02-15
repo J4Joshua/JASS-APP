@@ -315,10 +315,11 @@ export function ChordGraph({
       <AnimatePresence mode="sync">
         {allNodes.map(({ node, slot, role, animateFromPosition, animateFromScale }) => {
           const pos = getAbsPos(slot);
-          // Current chord: use live activeNotes when available; otherwise fall back to notesMap (covers initial load + first chord)
+          // Current chord: show only what you're playing (live input), never the chord you already played
+          // Next chord: show suggested chord notes
           const notes =
             role === "current"
-              ? ((activeNotes?.length ?? 0) > 0 ? (activeNotes ?? []) : (notesMap[node.chordId] || []))
+              ? (activeNotes ?? [])
               : (notesMap[node.chordId] || []);
           // Previous nodes don't show keyboard to keep the UI clean
           const showKb = keyboardMode && (role === 'current' || role === 'next');

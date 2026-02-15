@@ -2,8 +2,7 @@
 
 /**
  * Layered background with mesh gradients, responsive isometric grid,
- * and subtle floating orbs. Cool lavender / pink aesthetic to match
- * iridescent bubble theme.
+ * and subtle floating orbs. Clean white base with neutral accents.
  */
 
 export function Background() {
@@ -41,9 +40,9 @@ export function Background() {
           zIndex: 0,
           pointerEvents: "none",
           background: `
-            linear-gradient(160deg, #f6f2fa 0%, #eee8f4 25%, #e8e0f0 50%, #e2d8ec 100%),
-            linear-gradient(220deg, rgba(232, 210, 245, 0.4) 0%, transparent 45%),
-            linear-gradient(120deg, rgba(216, 180, 235, 0.25) 0%, transparent 50%)
+            linear-gradient(160deg, #ffffff 0%, #fafafa 25%, #f5f5f5 50%, #f0f0f0 100%),
+            linear-gradient(220deg, rgba(250, 250, 250, 0.6) 0%, transparent 45%),
+            linear-gradient(120deg, rgba(245, 245, 245, 0.4) 0%, transparent 50%)
           `,
         }}
       />
@@ -58,7 +57,7 @@ export function Background() {
           top: "-10%",
           left: "-5%",
           borderRadius: "50%",
-          background: "radial-gradient(circle, rgba(232, 200, 248, 0.35) 0%, rgba(210, 170, 235, 0.12) 40%, transparent 70%)",
+          background: "radial-gradient(circle, rgba(248, 248, 250, 0.4) 0%, rgba(240, 240, 245, 0.15) 40%, transparent 70%)",
           filter: "blur(40px)",
           zIndex: 0,
           pointerEvents: "none",
@@ -75,7 +74,7 @@ export function Background() {
           bottom: "-8%",
           right: "-5%",
           borderRadius: "50%",
-          background: "radial-gradient(circle, rgba(216, 180, 230, 0.28) 0%, rgba(200, 160, 220, 0.1) 45%, transparent 70%)",
+          background: "radial-gradient(circle, rgba(245, 245, 248, 0.35) 0%, rgba(235, 235, 240, 0.12) 45%, transparent 70%)",
           filter: "blur(45px)",
           zIndex: 0,
           pointerEvents: "none",
@@ -93,7 +92,7 @@ export function Background() {
           left: "50%",
           transform: "translate(-50%, -50%)",
           borderRadius: "50%",
-          background: "radial-gradient(ellipse 80% 60% at center, rgba(224, 140, 180, 0.12) 0%, rgba(210, 130, 170, 0.05) 50%, transparent 75%)",
+          background: "radial-gradient(ellipse 80% 60% at center, rgba(245, 245, 248, 0.15) 0%, rgba(238, 238, 242, 0.06) 50%, transparent 75%)",
           filter: "blur(50px)",
           zIndex: 0,
           pointerEvents: "none",
@@ -115,7 +114,7 @@ export function Background() {
         preserveAspectRatio="xMidYMid slice"
       >
         <g transform="translate(960, 540)">
-          <path d={gridLines.join(" ")} fill="none" stroke="#c4b8d0" strokeWidth={0.6} />
+          <path d={gridLines.join(" ")} fill="none" stroke="#d4d4d8" strokeWidth={0.6} />
         </g>
       </svg>
 
@@ -126,7 +125,7 @@ export function Background() {
           inset: 0,
           zIndex: 0,
           pointerEvents: "none",
-          background: "radial-gradient(ellipse 80% 50% at 50% 42%, rgba(220, 140, 180, 0.12) 0%, rgba(200, 130, 170, 0.04) 55%, transparent 75%)",
+          background: "radial-gradient(ellipse 80% 50% at 50% 42%, rgba(248, 248, 250, 0.12) 0%, rgba(242, 242, 245, 0.05) 55%, transparent 75%)",
         }}
       />
 
@@ -137,7 +136,7 @@ export function Background() {
           inset: 0,
           zIndex: 0,
           pointerEvents: "none",
-          background: "radial-gradient(ellipse 90% 85% at 50% 50%, transparent 35%, rgba(200, 190, 215, 0.2) 100%)",
+          background: "radial-gradient(ellipse 90% 85% at 50% 50%, transparent 35%, rgba(220, 220, 225, 0.15) 100%)",
         }}
       />
 
