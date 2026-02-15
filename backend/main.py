@@ -253,7 +253,6 @@ async def chord_worker():
         print(f"[chord_worker] ERROR: {e}", file=sys.stderr)
         traceback.print_exc(file=sys.stderr)
 
-
 def _get_suggestions(
     weights: dict[str, float],
     chord_name: str,
