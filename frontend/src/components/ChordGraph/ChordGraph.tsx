@@ -7,35 +7,40 @@ import { ChordEdge } from './ChordEdge';
 interface ChordGraphProps {
   state: ChordGraphState;
   previousState?: ChordGraphState | null;
-  showNotes?: boolean;
   keyboardMode?: boolean;
   notesMap?: Record<string, string[]>; // Map chord IDs to their notes
   /** Live held notes from backend - used for current chord's piano keys (activates based on actual MIDI input) */
   activeNotes?: string[];
 }
 
-const VIEWBOX_W = 1000;
+const VIEWBOX_W = 1200;
 const VIEWBOX_H = 900;
 const CENTER = { x: VIEWBOX_W / 2, y: 280 };
 
+const MAX_HISTORY = 5;
+
 /**
  * Slot positions — current chord is centre,
- * next chords sit in a row below.
+ * previous chords in an arc above, next chords in a row below.
  */
 const SLOT_POSITIONS = {
   'center': { x: 0, y: 0 },
-  'next-0': { x: -270, y: 280 },
-  'next-1': { x: 0, y: 280 },
-  'next-2': { x: 270, y: 280 },
+  'prev-0': { x: -280, y: -180 },
+  'prev-1': { x: -140, y: -220 },
+  'prev-2': { x: 0, y: -240 },
+  'prev-3': { x: 140, y: -220 },
+  'prev-4': { x: 280, y: -180 },
+  'next-0': { x: -360, y: 360 },
+  'next-1': { x: 0, y: 360 },
+  'next-2': { x: 360, y: 360 },
 } as const;
 
 type SlotId = keyof typeof SLOT_POSITIONS;
 
-function getAbsPos(slot: SlotId) {
-  return {
-    x: CENTER.x + SLOT_POSITIONS[slot].x,
-    y: CENTER.y + SLOT_POSITIONS[slot].y,
-  };
+function getAbsPos(slot: SlotId): { x: number; y: number } {
+  const key = slot as keyof typeof SLOT_POSITIONS;
+  const offset = SLOT_POSITIONS[key] ?? { x: 0, y: 0 };
+  return { x: CENTER.x + offset.x, y: CENTER.y + offset.y };
 }
 
 /** Subtle floating particles — memoized with fixed seed to avoid re-creating on each render. */
@@ -91,12 +96,11 @@ function AmbientParticles() {
 export function ChordGraph({
   state,
   previousState,
-  showNotes = true,
   keyboardMode = false,
   notesMap = {},
   activeNotes,
 }: ChordGraphProps) {
-  const { current, next } = state;
+  const { current, previous, next } = state;
 
   // When a suggestion is played, it becomes current — find which slot it came from for slide-up animation
   const promotedFrom =
@@ -109,21 +113,71 @@ export function ChordGraph({
   const promotedInitialPosition =
     promotedFrom >= 0 ? getAbsPos(`next-${promotedFrom}` as SlotId) : undefined;
 
+  // Detect shift: chord moved from prev-i to prev-j (e.g. prev-0 → prev-1 when new chord added)
+  const demotedFromCenter =
+    previousState &&
+    previous.length > 0 &&
+    previous[0].chordId === previousState.current.chordId;
+  const getPrevAnimateFrom = (i: number, chordId: string) => {
+    if (i === 0 && demotedFromCenter) return { pos: centerPos, scale: 55 / 32 };
+    const wasAtIndex = previousState?.previous?.findIndex((n) => n.chordId === chordId) ?? -1;
+    if (wasAtIndex >= 0 && wasAtIndex !== i) return { pos: getAbsPos(`prev-${wasAtIndex}` as SlotId), scale: undefined };
+    return { pos: undefined, scale: undefined };
+  };
+
   const allNodes = [
-    { node: current, slot: 'center' as SlotId, role: 'current' as const },
+    ...previous.slice(0, MAX_HISTORY).map((node, i) => {
+      const { pos, scale } = getPrevAnimateFrom(i, node.chordId);
+      return {
+        node,
+        slot: `prev-${i}` as SlotId,
+        role: 'previous' as const,
+        animateFromPosition: pos,
+        animateFromScale: scale,
+      };
+    }),
+    { node: current, slot: 'center' as SlotId, role: 'current' as const, animateFromPosition: promotedInitialPosition, animateFromScale: undefined },
     ...next.map((node, i) => ({
       node,
       slot: `next-${i}` as SlotId,
       role: 'next' as const,
+      animateFromPosition: undefined,
+      animateFromScale: undefined,
     })),
   ];
 
-  const edges = next.map((node, i) => ({
-    key: `edge-next-${i}`,
-    from: centerPos,
-    to: getAbsPos(`next-${i}` as SlotId),
-    variant: 'next' as const,
-  }));
+  // Previous edges: flow from center (current) back through history — center → prev-0 → prev-1 → ...
+  const prevEdges = (() => {
+    if (previous.length === 0) return [];
+    const result: { key: string; from: { x: number; y: number }; to: { x: number; y: number }; variant: 'previous' }[] = [];
+    // First link: center → most recent (prev-0)
+    result.push({
+      key: 'edge-center-to-prev',
+      from: centerPos,
+      to: getAbsPos('prev-0'),
+      variant: 'previous',
+    });
+    // Chain: prev-0 → prev-1 → prev-2 (back through history)
+    for (let j = 0; j < previous.length - 1; j++) {
+      result.push({
+        key: `edge-prev-${j}-to-${j + 1}`,
+        from: getAbsPos(`prev-${j}` as SlotId),
+        to: getAbsPos(`prev-${j + 1}` as SlotId),
+        variant: 'previous',
+      });
+    }
+    return result;
+  })();
+
+  const edges = [
+    ...prevEdges,
+    ...next.map((_, i) => ({
+      key: `edge-next-${i}`,
+      from: centerPos,
+      to: getAbsPos(`next-${i}` as SlotId),
+      variant: 'next' as const,
+    })),
+  ];
 
   return (
     <svg
@@ -158,14 +212,26 @@ export function ChordGraph({
         strokeDasharray="4 12"
       />
 
-      {/* Direction label */}
+      {/* Direction labels */}
+      <text
+        x={CENTER.x}
+        y={CENTER.y - 280}
+        fill="rgba(130, 100, 120, 0.25)"
+        fontSize={11}
+        fontWeight={500}
+        fontFamily="var(--font-patrick-hand), 'Patrick Hand', cursive"
+        letterSpacing={2}
+        textAnchor="middle"
+      >
+        BEFORE
+      </text>
       <text
         x={CENTER.x}
         y={CENTER.y + 220}
         fill="rgba(130, 100, 120, 0.3)"
-        fontSize={10}
+        fontSize={12}
         fontWeight={500}
-        fontFamily="'Plus Jakarta Sans', system-ui, sans-serif"
+        fontFamily="var(--font-patrick-hand), 'Patrick Hand', cursive"
         letterSpacing={2}
         textAnchor="middle"
       >
@@ -176,7 +242,7 @@ export function ChordGraph({
       <AmbientParticles />
 
       {/* Edges layer */}
-      <AnimatePresence mode="popLayout">
+      <AnimatePresence mode="sync">
         {edges.map((edge) => (
           <ChordEdge
             key={edge.key}
@@ -190,16 +256,17 @@ export function ChordGraph({
         ))}
       </AnimatePresence>
 
-      {/* Nodes layer — stable keys (slot + chordId) so only changed chords animate */}
-      <AnimatePresence mode="popLayout">
-        {allNodes.map(({ node, slot, role }) => {
+      {/* Nodes layer — stable keys (slot + chordId) for correct enter/exit */}
+      <AnimatePresence mode="sync">
+        {allNodes.map(({ node, slot, role, animateFromPosition, animateFromScale }) => {
           const pos = getAbsPos(slot);
           // Current chord: use live activeNotes when available; otherwise fall back to notesMap (covers initial load + first chord)
           const notes =
             role === "current"
               ? ((activeNotes?.length ?? 0) > 0 ? (activeNotes ?? []) : (notesMap[node.chordId] || []))
               : (notesMap[node.chordId] || []);
-          const isPromoted = role === 'current' && promotedFrom >= 0 && promotedInitialPosition;
+          // Previous nodes don't show keyboard to keep the UI clean
+          const showKb = keyboardMode && (role === 'current' || role === 'next');
           return (
             <ChordNodeComponent
               key={`${slot}-${node.chordId}`}
@@ -207,10 +274,10 @@ export function ChordGraph({
               x={pos.x}
               y={pos.y}
               role={role}
-              showNotes={showNotes}
-              showKeyboard={keyboardMode}
+              showKeyboard={showKb}
               notes={notes}
-              animateFromPosition={isPromoted ? promotedInitialPosition : undefined}
+              animateFromPosition={animateFromPosition}
+              animateFromScale={animateFromScale}
             />
           );
         })}

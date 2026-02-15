@@ -113,6 +113,7 @@ export default function Home() {
 
     ws.onopen = () => {
       setStatus("connected");
+      demoModeRef.current = false; // Switch to live mode when connected
       addLog("Connected!");
       console.log("✅ WebSocket CONNECTED");
     };
@@ -144,17 +145,31 @@ export default function Home() {
           addLog(`chord: ${data.chord.name ?? "(none)"} | notes: [${data.chord.notes.join(", ")}] | suggestions: ${sugStr}`);
 
           // Transform and update visualization
-          const transformedState = transformToChordGraphState(data);
+          const baseState = transformToChordGraphState(data);
           const transformedNotesMap = createNotesMap(data);
           console.log("🎹 WebSocket Message Received:");
           console.log("  Original:", data);
-          console.log("  Transformed State:", transformedState);
+          console.log("  Base State:", baseState);
           console.log("  Notes Map:", transformedNotesMap);
 
-          // Update live visualization state
-          if (transformedState) {
-            setChordGraphState(transformedState);
-            setNotesMap(transformedNotesMap);
+          if (baseState && !demoModeRef.current) {
+            // New chord: add old current to front of history; only drop the oldest (tail) when over max
+            // Skip when demoMode is true so Demo state isn't overwritten by live chords
+            setChordGraphState((prev) => {
+              if (!prev) return baseState;
+              const chordChanged =
+                baseState.current.chordId &&
+                prev.current.chordId &&
+                baseState.current.chordId !== prev.current.chordId;
+              const newPrevious = chordChanged
+                ? [
+                    { id: `prev-${Date.now()}`, chordId: prev.current.chordId },
+                    ...prev.previous,
+                  ].slice(0, 5) // keep newest 5, drop only the oldest
+                : prev.previous;
+              return { ...baseState, previous: newPrevious };
+            });
+            setNotesMap((prevMap) => ({ ...prevMap, ...transformedNotesMap }));
           }
         }
       } catch {
@@ -249,8 +264,12 @@ export default function Home() {
     return () => wsRef.current?.close();
   }, []);
 
-  const statusColor =
-    status === "connected" ? "bg-green-500" : status === "connecting" ? "bg-yellow-500" : "bg-red-500";
+  const statusDotColor =
+    status === "connected"
+      ? "#7868c0"
+      : status === "connecting"
+        ? "#a890c8"
+        : "#a898a8";
 
   // Fallback when chordGraphState is cleared (e.g. Release with no name)
   const fallbackChordGraphState: ChordGraphState = {
@@ -261,12 +280,12 @@ export default function Home() {
 
   const fallbackNotesMap = { "?": [] };
 
-  // Demo mode: cycle through chord states to test animations (no keyboard/backend needed)
+  // Demo mode: 0→1→2→3→4→5, then sticks at 5 and add-one-drop-earliest
   const DEMO_STATES: { state: ChordGraphState; notesMap: Record<string, string[]> }[] = [
     {
       state: {
         current: { id: "d1-c", chordId: "C" },
-        previous: [],
+        previous: [], // Start: no history yet
         next: [
           { id: "d1-n0", chordId: "F", probability: 0.8 },
           { id: "d1-n1", chordId: "G", probability: 0.75 },
@@ -278,7 +297,7 @@ export default function Home() {
     {
       state: {
         current: { id: "d2-c", chordId: "F" },
-        previous: [],
+        previous: [{ id: "d2-p0", chordId: "C" }],
         next: [
           { id: "d2-n0", chordId: "G", probability: 0.9 },
           { id: "d2-n1", chordId: "Am", probability: 0.7 },
@@ -290,7 +309,10 @@ export default function Home() {
     {
       state: {
         current: { id: "d3-c", chordId: "Am" },
-        previous: [],
+        previous: [
+          { id: "d3-p0", chordId: "F" },
+          { id: "d3-p1", chordId: "C" },
+        ],
         next: [
           { id: "d3-n0", chordId: "F", probability: 0.88 },
           { id: "d3-n1", chordId: "G", probability: 0.72 },
@@ -302,64 +324,196 @@ export default function Home() {
     {
       state: {
         current: { id: "d4-c", chordId: "G" },
-        previous: [],
+        previous: [
+          { id: "d4-p0", chordId: "Am" },
+          { id: "d4-p1", chordId: "F" },
+          { id: "d4-p2", chordId: "C" },
+        ],
         next: [
           { id: "d4-n0", chordId: "C", probability: 0.95 },
           { id: "d4-n1", chordId: "Am", probability: 0.8 },
           { id: "d4-n2", chordId: "D", probability: 0.5 },
         ],
       },
-      notesMap: { G: ["G", "B", "D"], C: ["C", "E", "G"], Am: ["A", "C", "E"], D: ["D", "F#", "A"] },
+      notesMap: { G: ["G", "B", "D"], C: ["C", "E", "G"], Am: ["A", "C", "E"], D: ["D", "F#", "A"], F: ["F", "A", "C"] },
+    },
+    {
+      state: {
+        current: { id: "d5-c", chordId: "C" },
+        previous: [
+          { id: "d5-p0", chordId: "G" },
+          { id: "d5-p1", chordId: "Am" },
+          { id: "d5-p2", chordId: "F" },
+          { id: "d5-p3", chordId: "C" },
+        ],
+        next: [
+          { id: "d5-n0", chordId: "F", probability: 0.95 },
+          { id: "d5-n1", chordId: "G", probability: 0.8 },
+          { id: "d5-n2", chordId: "Am", probability: 0.6 },
+        ],
+      },
+      notesMap: { C: ["C", "E", "G"], F: ["F", "A", "C"], G: ["G", "B", "D"], Am: ["A", "C", "E"] },
+    },
+    {
+      state: {
+        current: { id: "d6-c", chordId: "F" },
+        previous: [
+          { id: "d6-p0", chordId: "C" },
+          { id: "d6-p1", chordId: "G" },
+          { id: "d6-p2", chordId: "Am" },
+          { id: "d6-p3", chordId: "F" },
+          { id: "d6-p4", chordId: "C" },
+        ],
+        next: [
+          { id: "d6-n0", chordId: "G", probability: 0.9 },
+          { id: "d6-n1", chordId: "Am", probability: 0.7 },
+          { id: "d6-n2", chordId: "C", probability: 0.65 },
+        ],
+      },
+      notesMap: { F: ["F", "A", "C"], G: ["G", "B", "D"], Am: ["A", "C", "E"], C: ["C", "E", "G"] },
     },
   ];
   const [demoIndex, setDemoIndex] = useState(0);
+  const demoModeRef = useRef(false); // When true, WebSocket chord updates are ignored (Demo takes over)
+  const CHORD_CYCLE = ["C", "F", "Am", "G"] as const;
+  const DEMO_NEXT: Record<string, ChordGraphState["next"]> = {
+    C: [
+      { id: "next-0", chordId: "F", probability: 0.8 },
+      { id: "next-1", chordId: "G", probability: 0.75 },
+      { id: "next-2", chordId: "Am", probability: 0.85 },
+    ],
+    F: [
+      { id: "next-0", chordId: "G", probability: 0.9 },
+      { id: "next-1", chordId: "Am", probability: 0.7 },
+      { id: "next-2", chordId: "C", probability: 0.65 },
+    ],
+    Am: [
+      { id: "next-0", chordId: "F", probability: 0.88 },
+      { id: "next-1", chordId: "G", probability: 0.72 },
+      { id: "next-2", chordId: "Em", probability: 0.6 },
+    ],
+    G: [
+      { id: "next-0", chordId: "C", probability: 0.95 },
+      { id: "next-1", chordId: "Am", probability: 0.8 },
+      { id: "next-2", chordId: "D", probability: 0.5 },
+    ],
+  };
   const cycleDemo = () => {
-    const nextIndex = (demoIndex + 1) % DEMO_STATES.length;
-    const next = DEMO_STATES[nextIndex];
-    setDemoIndex(nextIndex);
-    setChordGraphState(next.state);
-    setNotesMap(next.notesMap);
+    demoModeRef.current = true; // Take over from live state when user clicks Demo
+    const n = DEMO_STATES.length;
+    const maxIdx = n - 1; // 5
+
+    if (demoIndex < maxIdx) {
+      // 0→1→2→3→4→5: advance to next state
+      const nextIndex = demoIndex + 1;
+      const next = DEMO_STATES[nextIndex];
+      setDemoIndex(nextIndex);
+      setChordGraphState(next.state);
+      setNotesMap(next.notesMap);
+    } else {
+      // Sticks at 5: add one to history, drop the earliest
+      setChordGraphState((prev) => {
+        if (!prev) return DEMO_STATES[maxIdx].state;
+        const cycleIdx = CHORD_CYCLE.indexOf(prev.current.chordId as (typeof CHORD_CYCLE)[number]);
+        const nextChordId = CHORD_CYCLE[(cycleIdx + 1) % CHORD_CYCLE.length];
+        const newPrevious = [
+          { id: `prev-${Date.now()}`, chordId: prev.current.chordId },
+          ...prev.previous,
+        ].slice(0, 5);
+        return {
+          current: { id: `current-${Date.now()}`, chordId: nextChordId },
+          previous: newPrevious,
+          next: DEMO_NEXT[nextChordId] ?? prev.next,
+        };
+      });
+    }
   };
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 font-[family-name:var(--font-geist-mono)]">
+    <div className="min-h-screen bg-zinc-950 text-zinc-100 font-[family-name:var(--font-patrick-hand)]">
       {/* Bubble Visualization - each sphere has its keyboard directly below it */}
       <div className="relative w-full h-screen">
         <Background />
 
-        {/* Connection controls overlay */}
-        <div className="absolute top-4 left-4 z-10 flex items-center gap-4 bg-white/80 backdrop-blur-sm px-4 py-2 rounded-lg border border-gray-200">
-          <span className={`w-3 h-3 rounded-full ${statusColor}`} />
-          <span className="text-sm text-gray-700">{status}</span>
+        {/* Connection controls overlay — 2.5d cool pastel theme */}
+        <div
+          className="absolute top-4 left-4 z-10 flex items-center gap-3 px-4 py-2.5 rounded-xl shadow-lg"
+          style={{
+            background: 'linear-gradient(145deg, rgba(248, 244, 252, 0.92) 0%, rgba(236, 228, 248, 0.88) 100%)',
+            backdropFilter: 'blur(12px)',
+            border: '1px solid rgba(196, 184, 208, 0.5)',
+            boxShadow: `
+              0 4px 20px rgba(168, 140, 200, 0.15),
+              0 1px 3px rgba(0,0,0,0.06),
+              inset 0 1px 0 rgba(255,255,255,0.6)
+            `,
+          }}
+        >
+          <span
+            className="w-2.5 h-2.5 rounded-full ring-2 ring-white/60 shadow-sm"
+            style={{ backgroundColor: statusDotColor }}
+          />
+          <span className="text-sm font-medium" style={{ color: '#5c4a6c' }}>{status}</span>
           {status === "disconnected" ? (
-            <button onClick={connect} className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-500 text-sm">
+            <button
+              onClick={connect}
+              className="px-3 py-1.5 rounded-lg text-white text-sm font-medium transition-all hover:brightness-110"
+              style={{
+                background: 'linear-gradient(160deg, #9080d8 0%, #7868c0 100%)',
+                boxShadow: '0 2px 8px rgba(120, 104, 192, 0.35), inset 0 1px 0 rgba(255,255,255,0.2)',
+              }}
+            >
               Connect
             </button>
           ) : (
-          <button onClick={disconnect} className="px-3 py-1 bg-gray-600 text-white rounded hover:bg-gray-500 text-sm">
-            Disconnect
-          </button>
+            <button
+              onClick={disconnect}
+              className="px-3 py-1.5 rounded-lg text-white text-sm font-medium transition-all hover:brightness-110"
+              style={{
+                background: 'linear-gradient(160deg, #8878b0 0%, #7060a0 100%)',
+                boxShadow: '0 2px 8px rgba(112, 96, 160, 0.35), inset 0 1px 0 rgba(255,255,255,0.2)',
+              }}
+            >
+              Disconnect
+            </button>
           )}
-          <Link href="/history" className="px-3 py-1 bg-zinc-700 hover:bg-zinc-600 rounded text-white text-sm">
+          <Link
+            href="/history"
+            className="px-3 py-1.5 rounded-lg text-white text-sm font-medium transition-all hover:brightness-110"
+            style={{
+              background: 'linear-gradient(160deg, #9080d8 0%, #7868c0 100%)',
+              boxShadow: '0 2px 8px rgba(120, 104, 192, 0.35), inset 0 1px 0 rgba(255,255,255,0.2)',
+            }}
+          >
             View History →
           </Link>
-          <button onClick={endSession} className="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 rounded text-white text-sm">
+          <button
+            onClick={endSession}
+            className="px-3 py-1.5 rounded-lg text-white text-sm font-medium transition-all hover:brightness-110"
+            style={{
+              background: 'linear-gradient(160deg, #9878c8 0%, #8068b0 100%)',
+              boxShadow: '0 2px 8px rgba(128, 104, 176, 0.35), inset 0 1px 0 rgba(255,255,255,0.2)',
+            }}
+          >
             End Session
           </button>
           <button
             onClick={cycleDemo}
-            className="px-3 py-1 bg-violet-600 hover:bg-violet-500 rounded text-white text-sm"
+            className="px-3 py-1.5 rounded-lg text-white text-sm font-medium transition-all hover:brightness-110"
+            style={{
+              background: 'linear-gradient(160deg, #a888d8 0%, #9070c8 100%)',
+              boxShadow: '0 2px 8px rgba(144, 112, 216, 0.35), inset 0 1px 0 rgba(255,255,255,0.2)',
+            }}
             title="Cycle chord states to test animations (no keyboard needed)"
           >
             Demo
           </button>
         </div>
 
-        <div className="absolute inset-0" tabIndex={0} ref={playAreaRef}>
+        <div className="absolute inset-0 z-[1]" tabIndex={0} ref={playAreaRef}>
           <ChordGraph
             state={chordGraphState || fallbackChordGraphState}
             previousState={prevChordGraphStateRef.current}
-            showNotes={false}
             keyboardMode={true}
             notesMap={notesMap || fallbackNotesMap}
             activeNotes={

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { Background } from "@/components/Background/Background";
 
 const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 
@@ -163,8 +164,8 @@ export default function History() {
     }
   };
 
-  const statusColor =
-    status === "connected" ? "bg-green-500" : status === "connecting" ? "bg-yellow-500" : "bg-red-500";
+  const statusDotColor =
+    status === "connected" ? "#7868c0" : status === "connecting" ? "#a890c8" : "#a898a8";
 
   // Deduplicate nodes: merge nodes with same name and depth
   const deduplicatedNodes = selectedSession
@@ -216,43 +217,77 @@ export default function History() {
         )
     : [];
 
+  const cardStyle = {
+    background: "linear-gradient(145deg, rgba(248, 244, 252, 0.95) 0%, rgba(236, 228, 248, 0.9) 100%)",
+    backdropFilter: "blur(12px)",
+    border: "1px solid rgba(196, 184, 208, 0.5)",
+    boxShadow: "0 4px 20px rgba(168, 140, 200, 0.12), 0 1px 3px rgba(0,0,0,0.04), inset 0 1px 0 rgba(255,255,255,0.6)",
+  };
+
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 p-8 font-[family-name:var(--font-geist-mono)]">
+    <div className="min-h-screen relative p-8 font-[family-name:var(--font-patrick-hand)]">
+      <Background />
+
       {/* Header */}
-      <div className="flex items-center justify-between mb-8">
-        <h1 className="text-2xl font-bold">Chord History</h1>
-        <Link href="/" className="px-4 py-1.5 bg-zinc-700 rounded hover:bg-zinc-600 text-sm">
+      <div
+        className="relative z-10 flex items-center justify-between mb-8 px-5 py-3 rounded-xl"
+        style={cardStyle}
+      >
+        <div className="flex items-center gap-3">
+          <span
+            className="w-2.5 h-2.5 rounded-full ring-2 ring-white/60"
+            style={{ backgroundColor: statusDotColor }}
+          />
+          <h1 className="text-2xl font-bold" style={{ color: "#5c4a6c" }}>
+            Chord History
+          </h1>
+        </div>
+        <Link
+          href="/"
+          className="px-4 py-2 rounded-lg text-white text-sm font-medium transition-all hover:brightness-110"
+          style={{
+            background: "linear-gradient(160deg, #9080d8 0%, #7868c0 100%)",
+            boxShadow: "0 2px 8px rgba(120, 104, 192, 0.35), inset 0 1px 0 rgba(255,255,255,0.2)",
+          }}
+        >
           ← Back to Live
         </Link>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+      <div className="relative z-10 grid grid-cols-1 lg:grid-cols-4 gap-6">
         <div className="lg:col-span-1 space-y-6">
 
           {/* Sessions List */}
-          <div className="bg-zinc-900 rounded-lg p-4 border border-zinc-800">
-            <h2 className="text-sm text-zinc-400 mb-3 uppercase tracking-wide">Sessions</h2>
+          <div className="rounded-xl p-4" style={cardStyle}>
+            <h2 className="text-sm mb-3 uppercase tracking-wide" style={{ color: "#7c6c8c" }}>
+              Sessions
+            </h2>
             <div className="space-y-1 max-h-96 overflow-y-auto">
               {sessions.length === 0 ? (
-                <p className="text-xs text-zinc-600">No sessions yet</p>
+                <p className="text-xs" style={{ color: "#9c8ca8" }}>No sessions yet</p>
               ) : (
-                sessions.map((session) => (
-                  <button
-                    key={session.filename}
-                    onClick={() => loadSession(session.filename)}
-                    className={`w-full text-left px-2 py-1 rounded text-xs transition ${
-                      selectedSession && 
-                      selectedSession.timestamp === session.timestamp
-                        ? "bg-blue-600"
-                        : "bg-zinc-800 hover:bg-zinc-700"
-                    }`}
-                  >
-                    <div className="font-bold text-sm">Session {session.session_number}</div>
-                    <div className="text-zinc-400 text-xs">
-                      {session.node_count} nodes • depth {session.total_depth}
-                    </div>
-                  </button>
-                ))
+                sessions.map((session) => {
+                  const isSelected = selectedSession?.timestamp === session.timestamp;
+                  return (
+                    <button
+                      key={session.filename}
+                      onClick={() => loadSession(session.filename)}
+                      className="w-full text-left px-3 py-2 rounded-lg text-xs transition-all hover:ring-1 hover:ring-[#a898b8]/50"
+                      style={{
+                        background: isSelected
+                          ? "linear-gradient(160deg, #9080d8 0%, #7868c0 100%)"
+                          : "rgba(220, 212, 232, 0.5)",
+                        color: isSelected ? "white" : "#5c4a6c",
+                        boxShadow: isSelected ? "0 2px 8px rgba(120, 104, 192, 0.3), inset 0 1px 0 rgba(255,255,255,0.2)" : "none",
+                      }}
+                    >
+                      <div className="font-bold text-sm">Session {session.session_number}</div>
+                      <div className="text-xs opacity-80">
+                        {session.node_count} nodes • depth {session.total_depth}
+                      </div>
+                    </button>
+                  );
+                })
               )}
             </div>
           </div>
@@ -263,7 +298,7 @@ export default function History() {
           {selectedSession ? (
             <div className="space-y-4">
               {/* Graph */}
-              <div className="bg-zinc-900 rounded-lg p-6 border border-zinc-800 overflow-auto" style={{ maxHeight: "600px" }}>
+              <div className="rounded-xl p-6 overflow-auto" style={{ ...cardStyle, maxHeight: "600px" }}>
                 <svg width={(selectedSession.total_depth + 1) * 120 + 40} height={graphHeight}>
                   {/* Draw edges */}
                   {dedupedRelations.map((rel) => {
@@ -287,9 +322,9 @@ export default function History() {
                         y1={sourceY}
                         x2={targetX}
                         y2={targetY}
-                        stroke={targetWasPlayed ? "#3b82f6" : "#666"}
+                        stroke={targetWasPlayed ? "#7868c0" : "#a898b8"}
                         strokeWidth={targetWasPlayed ? "3" : "1.5"}
-                        opacity={targetWasPlayed ? "0.8" : "0.4"}
+                        opacity={targetWasPlayed ? "0.85" : "0.45"}
                         markerEnd={targetWasPlayed ? "url(#arrowhead-played)" : "url(#arrowhead)"}
                       />
                     );
@@ -298,10 +333,10 @@ export default function History() {
                   {/* Arrow markers */}
                   <defs>
                     <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
-                      <polygon points="0 0, 10 3, 0 6" fill="#666" />
+                      <polygon points="0 0, 10 3, 0 6" fill="#a898b8" />
                     </marker>
                     <marker id="arrowhead-played" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
-                      <polygon points="0 0, 10 3, 0 6" fill="#3b82f6" />
+                      <polygon points="0 0, 10 3, 0 6" fill="#7868c0" />
                     </marker>
                   </defs>
 
@@ -322,10 +357,10 @@ export default function History() {
                           cx={x}
                           cy={y}
                           r="20"
-                          fill={wasPlayed ? "#3b82f6" : "#6b7280"}
-                          stroke={wasPlayed ? "#60a5fa" : "#9ca3af"}
+                          fill={wasPlayed ? "#9080d8" : "#b8a8c8"}
+                          stroke={wasPlayed ? "#a890e8" : "#c8b8d8"}
                           strokeWidth={wasPlayed ? "2" : "1"}
-                          opacity={wasPlayed ? "1" : "0.6"}
+                          opacity={wasPlayed ? "1" : "0.7"}
                         />
                         {/* Node label */}
                         <text
@@ -333,7 +368,7 @@ export default function History() {
                           y={y}
                           textAnchor="middle"
                           dy="0.3em"
-                          fill="white"
+                          fill={wasPlayed ? "white" : "#5c4a6c"}
                           fontSize="10"
                           fontWeight="bold"
                         >
@@ -344,7 +379,7 @@ export default function History() {
                           x={x}
                           y={y + 35}
                           textAnchor="middle"
-                          fill="#999"
+                          fill="#7c6c8c"
                           fontSize="8"
                         >
                           d:{node.depth}
@@ -357,54 +392,54 @@ export default function History() {
 
               {/* Stats */}
               <div className="grid grid-cols-3 gap-3">
-                <div className="bg-zinc-900 rounded-lg p-3 border border-zinc-800">
-                  <p className="text-xs text-zinc-500 mb-1">Total Nodes</p>
-                  <p className="text-xl font-bold">{deduplicatedNodes.nodes.length}</p>
+                <div className="rounded-xl p-4" style={cardStyle}>
+                  <p className="text-xs mb-1" style={{ color: "#7c6c8c" }}>Total Nodes</p>
+                  <p className="text-xl font-bold" style={{ color: "#5c4a6c" }}>{deduplicatedNodes.nodes.length}</p>
                 </div>
-                <div className="bg-zinc-900 rounded-lg p-3 border border-zinc-800">
-                  <p className="text-xs text-zinc-500 mb-1">Total Edges</p>
-                  <p className="text-xl font-bold">{dedupedRelations.length}</p>
+                <div className="rounded-xl p-4" style={cardStyle}>
+                  <p className="text-xs mb-1" style={{ color: "#7c6c8c" }}>Total Edges</p>
+                  <p className="text-xl font-bold" style={{ color: "#5c4a6c" }}>{dedupedRelations.length}</p>
                 </div>
-                <div className="bg-zinc-900 rounded-lg p-3 border border-zinc-800">
-                  <p className="text-xs text-zinc-500 mb-1">Total Depth</p>
-                  <p className="text-xl font-bold">{selectedSession.total_depth}</p>
+                <div className="rounded-xl p-4" style={cardStyle}>
+                  <p className="text-xs mb-1" style={{ color: "#7c6c8c" }}>Total Depth</p>
+                  <p className="text-xl font-bold" style={{ color: "#5c4a6c" }}>{selectedSession.total_depth}</p>
                 </div>
               </div>
 
               {/* Legend */}
-              <div className="bg-zinc-900 rounded-lg p-4 border border-zinc-800">
-                <h3 className="text-xs text-zinc-400 mb-3 uppercase tracking-wide">Legend</h3>
+              <div className="rounded-xl p-4" style={cardStyle}>
+                <h3 className="text-xs mb-3 uppercase tracking-wide" style={{ color: "#7c6c8c" }}>Legend</h3>
                 <div className="grid grid-cols-2 gap-4 text-xs">
                   <div className="flex items-center gap-2">
                     <svg width="24" height="24">
-                      <circle cx="12" cy="12" r="8" fill="#3b82f6" stroke="#60a5fa" strokeWidth="2" />
+                      <circle cx="12" cy="12" r="8" fill="#9080d8" stroke="#a890e8" strokeWidth="2" />
                     </svg>
-                    <span className="text-zinc-300">Played chord (has progression)</span>
+                    <span style={{ color: "#5c4a6c" }}>Played chord (has progression)</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <svg width="24" height="24">
-                      <circle cx="12" cy="12" r="8" fill="#6b7280" stroke="#9ca3af" strokeWidth="1" opacity="0.6" />
+                      <circle cx="12" cy="12" r="8" fill="#b8a8c8" stroke="#c8b8d8" strokeWidth="1" opacity="0.7" />
                     </svg>
-                    <span className="text-zinc-300">Suggested chord (not played)</span>
+                    <span style={{ color: "#5c4a6c" }}>Suggested chord (not played)</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <svg width="24" height="24">
-                      <line x1="2" y1="12" x2="22" y2="12" stroke="#3b82f6" strokeWidth="3" opacity="0.8" />
+                      <line x1="2" y1="12" x2="22" y2="12" stroke="#7868c0" strokeWidth="3" opacity="0.85" />
                     </svg>
-                    <span className="text-zinc-300">Played progression</span>
+                    <span style={{ color: "#5c4a6c" }}>Played progression</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <svg width="24" height="24">
-                      <line x1="2" y1="12" x2="22" y2="12" stroke="#666" strokeWidth="1.5" opacity="0.4" />
+                      <line x1="2" y1="12" x2="22" y2="12" stroke="#a898b8" strokeWidth="1.5" opacity="0.45" />
                     </svg>
-                    <span className="text-zinc-300">Suggested progression</span>
+                    <span style={{ color: "#5c4a6c" }}>Suggested progression</span>
                   </div>
                 </div>
               </div>
             </div>
           ) : (
-            <div className="bg-zinc-900 rounded-lg p-6 border border-zinc-800 h-96 flex items-center justify-center">
-              <p className="text-zinc-600">Select a session to view its chord progression graph</p>
+            <div className="rounded-xl p-6 h-96 flex items-center justify-center" style={cardStyle}>
+              <p style={{ color: "#9c8ca8" }}>Select a session to view its chord progression graph</p>
             </div>
           )}
         </div>

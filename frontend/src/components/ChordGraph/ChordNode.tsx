@@ -3,7 +3,6 @@ import { motion } from 'framer-motion';
 import { useId } from 'react';
 import type { ChordNode as ChordNodeType } from '../../types/chord';
 import { getChordColor } from '../../utils/chordColors';
-import { NoteLabels } from './OrbitingDots';
 import ChordKeyboard from '../ChordKeyboard';
 
 interface ChordNodeProps {
@@ -11,18 +10,21 @@ interface ChordNodeProps {
   x: number;
   y: number;
   role: 'previous' | 'current' | 'next';
-  showNotes?: boolean;
   showKeyboard?: boolean;
   notes?: string[]; // Accept notes as prop from backend
   /** When a suggestion is played, animate from this position (slide up to center) */
   animateFromPosition?: { x: number; y: number };
+  /** When demoted from current to previous, start at this scale for smooth shrink */
+  animateFromScale?: number;
+  /** Scale multiplier for previous nodes — older (higher index) = smaller, groups visually */
+  depthScale?: number;
 }
 
 /** Visual config for each role's sphere — iridescent soap bubble style. */
 const ROLE_CONFIG = {
   current: {
     radius: 55,
-    fontSize: 17,
+    fontSize: 22,
     fontWeight: 700,
     bodyFill: 'url(#current-body)',
     pearlFill: 'url(#current-pearl)',
@@ -44,7 +46,7 @@ const ROLE_CONFIG = {
   },
   next: {
     radius: 40,
-    fontSize: 13,
+    fontSize: 17,
     fontWeight: 600,
     bodyFill: 'url(#next-body)',
     pearlFill: 'url(#next-pearl)',
@@ -66,7 +68,7 @@ const ROLE_CONFIG = {
   },
   previous: {
     radius: 32,
-    fontSize: 11,
+    fontSize: 14,
     fontWeight: 500,
     bodyFill: 'url(#prev-body)',
     pearlFill: 'url(#prev-pearl)',
@@ -162,14 +164,15 @@ function ChordNodeComponentInner({
   x,
   y,
   role,
-  showNotes = true,
   showKeyboard = true,
   notes = [],
   animateFromPosition,
+  animateFromScale,
+  depthScale = 1,
 }: ChordNodeProps) {
   const config = ROLE_CONFIG[role];
   const { radius } = config;
-  const opacity = role === 'previous' ? 0.75 : 1;
+  const opacity = role === 'previous' ? 0.92 : 1;
   const uid = useId();
   const seed = node.id.charCodeAt(0) % 5;
 
@@ -185,26 +188,34 @@ function ChordNodeComponentInner({
 
   const labelColor = cc.text;
   const labelShadow = cc.light;
-  const noteColor = cc.deep;
-  const noteBg = `${cc.base}55`;
   const rippleColor = `${cc.base}44`;
   const rippleStroke = `${cc.deep}30`;
   const shadowColor = `${cc.deep}30`;
-  const isSlidingUp = !!animateFromPosition;
+  const fromPos = animateFromPosition;
+  const isSlidingUp = !!fromPos && role === 'current';
+  const isDemoting = !!animateFromScale && !!fromPos;
+  const isShifting = !!fromPos && !animateFromScale && role === 'previous';
+
+  const targetScale = depthScale;
+  const hasMotion = isSlidingUp || isDemoting || isShifting;
 
   return (
     <motion.g
-      style={{ willChange: isSlidingUp ? 'transform' : undefined }}
+      style={{ willChange: hasMotion ? 'transform' : undefined }}
       initial={
-        isSlidingUp
-          ? { x: animateFromPosition.x, y: animateFromPosition.y, opacity: 1, scale: 1 }
-          : { x, y, opacity: 0, scale: 0.98 }
+        isSlidingUp && fromPos
+          ? { x: fromPos.x, y: fromPos.y, opacity: 1, scale: targetScale }
+          : isDemoting && fromPos
+            ? { x: fromPos.x, y: fromPos.y, opacity: 1, scale: (animateFromScale ?? 1) * targetScale }
+            : isShifting && fromPos
+              ? { x: fromPos.x, y: fromPos.y, opacity, scale: targetScale }
+              : { x, y, opacity, scale: targetScale }
       }
-      animate={{ x, y, opacity, scale: 1 }}
+      animate={{ x, y, opacity, scale: targetScale }}
       exit={{ x, y, opacity: 0, scale: 0.98 }}
       transition={{
-        duration: isSlidingUp ? 0.4 : 0.22,
-        ease: isSlidingUp ? [0.22, 0.61, 0.36, 1] : [0.4, 0, 0.2, 1],
+        duration: isSlidingUp ? 0.4 : isDemoting ? 0.35 : isShifting ? 0.32 : 0.22,
+        ease: isSlidingUp ? [0.22, 0.61, 0.36, 1] : isDemoting ? [0.25, 0.46, 0.45, 0.94] : isShifting ? [0.32, 0.72, 0.38, 1] : [0.4, 0, 0.2, 1],
       }}
     >
         <g>
@@ -322,7 +333,7 @@ function ChordNodeComponentInner({
             fill={labelColor}
             fontSize={config.fontSize}
             fontWeight={config.fontWeight}
-            fontFamily="'Plus Jakarta Sans', system-ui, sans-serif"
+            fontFamily="var(--font-patrick-hand), 'Patrick Hand', cursive"
             style={{
               pointerEvents: 'none',
               userSelect: 'none',
@@ -334,53 +345,13 @@ function ChordNodeComponentInner({
             {node.chordId}
           </text>
 
-          {/* ── Note labels ── */}
-          {showNotes && notes.length > 0 && (
-            <NoteLabels
-              notes={notes}
-              radius={radius}
-              role={role}
-              noteColor={noteColor}
-              noteBg={noteBg}
-            />
-          )}
-
-          {/* Probability badge for next chords */}
-          {role === 'next' && node.probability !== undefined && (
-            <g>
-              <rect
-                x={-14}
-                y={radius + 6}
-                width={28}
-                height={16}
-                rx={8}
-                fill={`${cc.base}30`}
-                stroke={`${cc.deep}50`}
-                strokeWidth={0.5}
-              />
-              <text
-                x={0}
-                y={radius + 14}
-                textAnchor="middle"
-                dominantBaseline="central"
-                fill={cc.text}
-                fontSize={8}
-                fontWeight={600}
-                fontFamily="'Plus Jakarta Sans', system-ui, sans-serif"
-                style={{ pointerEvents: 'none', userSelect: 'none' }}
-              >
-                {Math.round(node.probability * 100)}%
-              </text>
-            </g>
-          )}
-
           {/* Chord keyboard below sphere */}
           {showKeyboard && (role === 'current' || role === 'next') && (
             <foreignObject
-              x={role === 'current' ? -135 : -135}
+              x={role === 'current' ? -162 : -162}
               y={radius + (role === 'current' ? 14 : 28)}
-              width={role === 'current' ? 270 : 270}
-              height={role === 'current' ? 120 : 115}
+              width={324}
+              height={role === 'current' ? 144 : 138}
               style={{ overflow: 'visible' }}
               xmlns="http://www.w3.org/1999/xhtml"
             >
@@ -393,6 +364,7 @@ function ChordNodeComponentInner({
                   compact={true}
                   minimal
                   micro={false}
+                  scale={1.2}
                 />
               </div>
             </foreignObject>
