@@ -137,6 +137,9 @@ async def chord_worker():
         chroma = [1 if i in pitch_classes else 0 for i in range(12)]
         names = [NOTE_NAMES[pc] for pc in sorted(pitch_classes)]
 
+        # Always broadcast live held notes for visual feedback on piano display
+        await broadcast({"type": "live_notes", "notes": names})
+
         # detect chord (check overrides first, then pychord)
         chord_name = CHORD_OVERRIDES.get(frozenset(names))
         if chord_name is None and len(names) >= 2:

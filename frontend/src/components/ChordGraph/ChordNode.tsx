@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { motion } from 'framer-motion';
 import { useId } from 'react';
 import type { ChordNode as ChordNodeType } from '../../types/chord';
@@ -90,6 +91,7 @@ const ROLE_CONFIG = {
 /**
  * Animated ripple bands that sweep across the sphere surface.
  */
+/** Simplified ripples — 2 ellipses, 1 animate each (was 4×3), no filter for perf. */
 function SphereRipples({
   radius,
   color,
@@ -104,43 +106,18 @@ function SphereRipples({
   seed: number;
 }) {
   const ripples = [
-    { rx: radius * 0.95, ry: radius * 0.12, yStart: -radius * 0.6, yEnd: radius * 0.6, dur: 6, delay: 0 },
-    { rx: radius * 0.88, ry: radius * 0.09, yStart: radius * 0.5, yEnd: -radius * 0.5, dur: 7, delay: 1.5 },
-    { rx: radius * 0.80, ry: radius * 0.10, yStart: -radius * 0.4, yEnd: radius * 0.4, dur: 8, delay: 3 },
-    { rx: radius * 0.70, ry: radius * 0.08, yStart: radius * 0.3, yEnd: -radius * 0.3, dur: 9, delay: 4.5 },
+    { rx: radius * 0.9, ry: radius * 0.1, yStart: -radius * 0.5, yEnd: radius * 0.5, dur: 7, delay: 0 },
+    { rx: radius * 0.75, ry: radius * 0.08, yStart: radius * 0.4, yEnd: -radius * 0.4, dur: 8, delay: 2 },
   ];
 
   return (
-    <g clipPath={`url(#${clipId})`} filter="url(#ripple-blur)">
+    <g clipPath={`url(#${clipId})`}>
       {ripples.map((r, i) => (
-        <ellipse
-          key={i}
-          cx={0}
-          rx={r.rx}
-          ry={r.ry}
-          fill={color}
-          stroke={strokeColor}
-          strokeWidth={0.5}
-          opacity={0.7}
-        >
+        <ellipse key={i} cx={0} rx={r.rx} ry={r.ry} fill={color} stroke={strokeColor} strokeWidth={0.5} opacity={0.6}>
           <animate
             attributeName="cy"
             values={`${r.yStart};${r.yEnd};${r.yStart}`}
             dur={`${r.dur + seed * 0.3}s`}
-            begin={`${r.delay}s`}
-            repeatCount="indefinite"
-          />
-          <animate
-            attributeName="rx"
-            values={`${r.rx};${r.rx * 0.92};${r.rx};${r.rx * 1.04};${r.rx}`}
-            dur={`${r.dur * 1.3}s`}
-            begin={`${r.delay + 0.5}s`}
-            repeatCount="indefinite"
-          />
-          <animate
-            attributeName="opacity"
-            values="0.5;0.8;0.5;0.7;0.5"
-            dur={`${r.dur * 0.8}s`}
             begin={`${r.delay}s`}
             repeatCount="indefinite"
           />
@@ -153,6 +130,7 @@ function SphereRipples({
 /**
  * Tiny bright spots that simulate light caustics / internal refraction.
  */
+/** Caustic highlights — static circles, no blur filter, no animate (was 2 animates per spot). */
 function CausticHighlights({
   radius,
   color,
@@ -167,40 +145,19 @@ function CausticHighlights({
   const spots = Array.from({ length: count }, (_, i) => {
     const angle = ((i * 137.5 + seed * 60) * Math.PI) / 180;
     const dist = radius * (0.2 + (i * 0.15));
-    return {
-      cx: Math.cos(angle) * dist,
-      cy: Math.sin(angle) * dist,
-      r: 1.2 + i * 0.4,
-      dur: 5 + i * 2 + seed * 0.5,
-      delay: i * 1.5,
-    };
+    return { cx: Math.cos(angle) * dist, cy: Math.sin(angle) * dist, r: 1.2 + i * 0.4 };
   });
 
   return (
-    <g filter="url(#caustic-blur)">
+    <g>
       {spots.map((s, i) => (
-        <circle key={i} cx={s.cx} cy={s.cy} r={s.r} fill={color} opacity={0.6}>
-          <animate
-            attributeName="opacity"
-            values="0.3;0.8;0.3;0.6;0.3"
-            dur={`${s.dur}s`}
-            begin={`${s.delay}s`}
-            repeatCount="indefinite"
-          />
-          <animate
-            attributeName="r"
-            values={`${s.r};${s.r * 1.4};${s.r};${s.r * 0.7};${s.r}`}
-            dur={`${s.dur * 1.2}s`}
-            begin={`${s.delay}s`}
-            repeatCount="indefinite"
-          />
-        </circle>
+        <circle key={i} cx={s.cx} cy={s.cy} r={s.r} fill={color} opacity={0.5} />
       ))}
     </g>
   );
 }
 
-export function ChordNodeComponent({
+function ChordNodeComponentInner({
   node,
   x,
   y,
@@ -237,6 +194,7 @@ export function ChordNodeComponent({
 
   return (
     <motion.g
+      style={{ willChange: isSlidingUp ? 'transform' : undefined }}
       initial={
         isSlidingUp
           ? { x: animateFromPosition.x, y: animateFromPosition.y, opacity: 1, scale: 1 }
@@ -303,7 +261,7 @@ export function ChordNodeComponent({
             filter={config.haloFilter}
           />
 
-          {/* ── Ground shadow ── */}
+          {/* ── Ground shadow — single animate for perf ── */}
           <ellipse
             cx={0}
             cy={radius + 12}
@@ -313,14 +271,8 @@ export function ChordNodeComponent({
             filter="url(#sphere-ground-shadow)"
           >
             <animate
-              attributeName="rx"
-              values={`${radius * 0.65};${radius * 0.58};${radius * 0.65};${radius * 0.68};${radius * 0.65}`}
-              dur={`${config.floatDuration}s`}
-              repeatCount="indefinite"
-            />
-            <animate
               attributeName="opacity"
-              values="1;0.7;1;1.1;1"
+              values="1;0.85;1"
               dur={`${config.floatDuration}s`}
               repeatCount="indefinite"
             />
@@ -449,3 +401,5 @@ export function ChordNodeComponent({
       </motion.g>
   );
 }
+
+export const ChordNodeComponent = memo(ChordNodeComponentInner);
