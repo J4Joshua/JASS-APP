@@ -133,26 +133,26 @@ async def chord_worker():
         chroma_key = tuple(chroma)
         names = [NOTE_NAMES[pc] for pc in sorted(pitch_classes)]
 
-        chord_name: str | None = None
-        if len(names) >= 2:
-            chords = find_chords_from_notes(names)
-            if chords:
-                chord_name = str(chords[0])
-        if chord_name is None:
-            chord_name = "-".join(names) if names else "?"
+        # chord_name: str | None = None
+        # if len(names) >= 2:
+        #     chords = find_chords_from_notes(names)
+        #     if chords:
+        #         chord_name = str(chords[0])
+        # if chord_name is None:
+        #     chord_name = "-".join(names) if names else "?"
 
-        print(f"[chord_worker] detected: {chord_name!r}  notes: {names}  chroma={list(chroma_key)}", file=sys.stderr)
+        # print(f"[chord_worker] detected: {chord_name!r}  notes: {names}  chroma={list(chroma_key)}", file=sys.stderr)
 
-        # Gate: if we have suggestions, only accept chords whose chroma matches
-        if allowed_suggestions and chroma_key not in allowed_suggestions:
-            print(f"[chord_worker] REJECTED {chord_name!r}  played={list(chroma_key)}  allowed={[list(c) for c in allowed_suggestions]}", file=sys.stderr)
-            continue
+        # # Gate: if we have suggestions, only accept chords whose chroma matches
+        # if allowed_suggestions and chroma_key not in allowed_suggestions:
+        #     print(f"[chord_worker] REJECTED {chord_name!r}  played={list(chroma_key)}  allowed={[list(c) for c in allowed_suggestions]}", file=sys.stderr)
+        #     continue
 
-        print(f"[chord_worker] ACCEPTED {chord_name!r}  chroma={list(chroma_key)}", file=sys.stderr)
+        # print(f"[chord_worker] ACCEPTED {chord_name!r}  chroma={list(chroma_key)}", file=sys.stderr)
 
         # Get suggestions for accepted chord
         suggestions = await asyncio.to_thread(
-            _get_suggestions, chord_name, chroma
+            _get_suggestions, chroma
         )
 
         print(f"[chord_worker] suggestions: {[s['name'] for s in suggestions]}", file=sys.stderr)
