@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Sequence
 
 import numpy as np
@@ -33,6 +34,100 @@ PC_TO_IDX: dict[str, int] = {
 
 MAJOR_INTERVALS = [0, 2, 4, 5, 7, 9, 11]
 MINOR_INTERVALS = [0, 2, 3, 5, 7, 8, 10]
+
+# ── Roman-numeral → chord helpers ──────────────────────────────────────────
+
+_LETTERS = ["C", "D", "E", "F", "G", "A", "B"]
+_LETTER_TO_BASE_PC = {"C": 0, "D": 2, "E": 4, "F": 5, "G": 7, "A": 9, "B": 11}
+
+_ROMAN_UPPER = {"I": 0, "II": 1, "III": 2, "IV": 3, "V": 4, "VI": 5, "VII": 6}
+_ROMAN_RE = re.compile(
+    r"^([b#]?)"
+    r"(VII|VI|IV|V|III|II|I|vii|vi|iv|v|iii|ii|i)"
+    r"(.*)$",
+)
+
+
+def _has_quality_prefix(suffix: str) -> bool:
+    """Return True if *suffix* already encodes root quality (m, ø, dim …)."""
+    if suffix.startswith(("ø", "°", "dim", "aug", "+")):
+        return True
+    if suffix.startswith("m") and not suffix.startswith("maj"):
+        return True
+    return False
+
+
+def _build_scale_notes(root: str, mode: str) -> list[str]:
+    """Return the 7 scale-note names for *root*/*mode* with correct spelling."""
+    root_pc = PC_TO_IDX[root]
+    intervals = MAJOR_INTERVALS if mode == "major" else MINOR_INTERVALS
+
+    root_letter_idx = _LETTERS.index(root[0].upper())
+    notes: list[str] = []
+    for degree, interval in enumerate(intervals):
+        target_pc = (root_pc + interval) % 12
+        letter = _LETTERS[(root_letter_idx + degree) % 7]
+        diff = (target_pc - _LETTER_TO_BASE_PC[letter]) % 12
+        if diff == 0:
+            notes.append(letter)
+        elif diff == 1:
+            notes.append(letter + "#")
+        elif diff == 11:            # -1 mod 12
+            notes.append(letter + "b")
+        elif diff == 2:
+            notes.append(letter + "##")
+        elif diff == 10:
+            notes.append(letter + "bb")
+        else:
+            # Extreme enharmonic – fall back to flat-preference name
+            _FLAT_NAMES = ["C", "Db", "D", "Eb", "E", "F",
+                           "Gb", "G", "Ab", "A", "Bb", "B"]
+            notes.append(_FLAT_NAMES[target_pc])
+    return notes
+
+
+def _apply_accidental(note: str, accidental: str) -> str:
+    """Apply ``'b'`` or ``'#'`` to an already-spelled note name."""
+    if not accidental:
+        return note
+    existing = note[1:]  # e.g. '', '#', 'b'
+    letter = note[0]
+    if accidental == "b":
+        remap = {"#": "", "": "b", "b": "bb", "##": "#"}
+    else:
+        remap = {"b": "", "": "#", "#": "##", "bb": "b"}
+    return letter + remap.get(existing, existing)
+
+
+def roman_to_chord(numeral: str, key: str) -> str:
+    """Convert a Roman-numeral chord symbol to a concrete chord name in *key*.
+
+    >>> roman_to_chord("ii7", "C")
+    'Dm7'
+    >>> roman_to_chord("V7", "C")
+    'G7'
+    >>> roman_to_chord("Imaj7", "C")
+    'Cmaj7'
+    >>> roman_to_chord("bII7", "C")
+    'Db7'
+    """
+    root, mode = parse_key(key)
+
+    m = _ROMAN_RE.match(numeral)
+    if not m:
+        raise ValueError(f"Cannot parse Roman numeral: {numeral!r}")
+
+    accidental, roman, suffix = m.groups()
+    degree = _ROMAN_UPPER[roman.upper()]
+    is_minor = roman.islower()
+
+    note = _apply_accidental(_build_scale_notes(root, mode)[degree], accidental)
+
+    if is_minor and not _has_quality_prefix(suffix):
+        suffix = "m" + suffix
+
+    return note + suffix
+
 
 # Diatonic triad quality per scale degree (offset from tonic)
 MAJOR_TRIAD_MAP: dict[int, str] = {
