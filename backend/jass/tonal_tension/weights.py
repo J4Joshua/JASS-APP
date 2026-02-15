@@ -5,10 +5,10 @@ PAPER_WEIGHTS_TABLE1: dict[str, float] = {
     # From Table 1 (Experiment 1): statistically significant indicators.
     # Tonal distance (from the key) -> d2
     # Dissonance -> c
-    "d1": 0.4,
-    "d2": 2,
+    "d1": 0.78,
+    "d2": 2.4,
     "d3": 1.4,
-    "c": 2,
+    "c": 3.7,
 }
 
 PAPER_WEIGHTS_TABLE2: dict[str, float] = {
