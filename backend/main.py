@@ -253,44 +253,50 @@ async def chord_worker():
         print(f"[chord_worker] ERROR: {e}", file=sys.stderr)
         traceback.print_exc(file=sys.stderr)
 
-def _get_suggestions(weights: dict[str, float], chord_name: str, chroma: list[int] | None = None) -> list[dict]:
+
+def _get_suggestions(
+    weights: dict[str, float],
+    chord_name: str,
+    chroma: list[int] | None = None,
+) -> list[dict]:
     if tis_idx is None:
         return []
 
-    # Two TIS-based goals (resolve + tension), then the curated series chord
-    goals = ["resolve", "tension"]
+    goal = "0"   # numeric target tension
 
     out: list[dict] = []
     try:
-        for goal in goals:
-            result = suggest_chords(
-                weights=weights,
-                chroma=chroma,
-                key="C",
-                index=tis_idx,
-                top=1,          # top 1 per goal
-                goal=goal,      # different goal each call
-            )
+        result = suggest_chords(
+            weights=weights,
+            chroma=chroma,
+            key="C",
+            index=tis_idx,
+            top=3,
+            goal=goal,
+        )
 
-            # Ensure we always append *one* item per goal
-            rlist = result.get("results", []) or []
-            if not rlist:
+        rlist = result.get("results", []) or []
+
+        # Always produce exactly 2 TIS suggestions
+        for i in range(3):
+            if i >= len(rlist):
                 out.append({
                     "name": None,
                     "notes": [],
                     "chroma": [],
                     "tension": 0.0,
                     "goal": goal,
+                    "rank": i + 1,
                 })
                 continue
 
-            r = rlist[0]
+            r = rlist[i]
             row = int(r["row"])
             bits = tis_idx.chroma_bits[row].tolist()
 
             notes = [n.capitalize() for n in r.get("notes", [])]
             if not notes:
-                notes = [NOTE_NAMES[i] for i, b in enumerate(bits) if b]
+                notes = [NOTE_NAMES[j] for j, b in enumerate(bits) if b]
 
             out.append({
                 "name": r["name"],
@@ -298,33 +304,35 @@ def _get_suggestions(weights: dict[str, float], chord_name: str, chroma: list[in
                 "chroma": bits,
                 "tension": round(float(r.get("tension", 0)), 3),
                 "goal": goal,
+                "rank": i + 1,
             })
 
-        # Append curated series chord as the 3rd suggestion
-        if resolved_series:
-            entry = resolved_series[series_cursor]
-            out.append({
-                "name": entry["name"],
-                "notes": list(entry["notes"]),
-                "chroma": list(entry["chroma"]),
-                "tension": 0.0,
-                "goal": "series",
-            })
-        else:
-            out.append({
-                "name": None,
-                "notes": [],
-                "chroma": [],
-                "tension": 0.0,
-                "goal": "series",
-            })
+        # # Append curated series chord as the 3rd suggestion
+        # if resolved_series:
+        #     entry = resolved_series[series_cursor]
+        #     out.append({
+        #         "name": entry["name"],
+        #         "notes": list(entry["notes"]),
+        #         "chroma": list(entry["chroma"]),
+        #         "tension": 0.0,
+        #         "goal": "series",
+        #         "rank": 3,
+        #     })
+        # else:
+        #     out.append({
+        #         "name": None,
+        #         "notes": [],
+        #         "chroma": [],
+        #         "tension": 0.0,
+        #         "goal": "series",
+        #         "rank": 3,
+        #     })
 
         return out
 
     except Exception as e:
         print(f"[ws] suggest error: chord={chord_name!r} chroma={chroma} → {e}", file=sys.stderr)
         return []
-
 
 
 # --- Stage 3: WebSocket broadcast ---
@@ -340,7 +348,6 @@ async def broadcast(message: dict):
     for ws, result in zip(list(clients), results):
         if isinstance(result, Exception):
             clients.discard(ws)
-
 
 # --- Session Management ---
 
