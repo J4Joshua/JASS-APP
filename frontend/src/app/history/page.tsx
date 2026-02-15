@@ -2,9 +2,18 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Background } from "@/components/Background/Background";
+import type { HistorySeed } from "@/types/chord";
 
 const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+
+const HISTORY_SEED_KEY = "historySeed";
+
+function chromaToNotes(chroma: number[]): string[] {
+  if (!chroma || chroma.length !== 12) return [];
+  return NOTE_NAMES.filter((_, i) => chroma[i] === 1);
+}
 
 type Node = {
   uuid: string;
@@ -56,6 +65,7 @@ type Song = {
 };
 
 export default function History() {
+  const router = useRouter();
   const [status, setStatus] = useState<"disconnected" | "connecting" | "connected">("disconnected");
   const [chordHistory, setChordHistory] = useState<ChordEvent[]>([]);
   const [isRecording, setIsRecording] = useState(false);
@@ -272,6 +282,71 @@ export default function History() {
     boxShadow: "0 4px 20px rgba(168, 140, 200, 0.12), 0 1px 3px rgba(0,0,0,0.04), inset 0 1px 0 rgba(255,255,255,0.6)",
   };
 
+  function handleNodeClick(node: Node) {
+    // Next: chords this node points TO (outgoing edges)
+    const outgoingRels = dedupedRelations.filter((r) => r.source_node === node.uuid);
+    const targetUuids = [...new Set(outgoingRels.map((r) => r.target_node))];
+    const targetNodes = targetUuids
+      .map((uuid) => deduplicatedNodes.nodes.find((n) => n.uuid === uuid))
+      .filter((n): n is Node => n != null);
+    const nextDeduped = targetNodes.filter(
+      (n, i, arr) => arr.findIndex((x) => x.name === n.name) === i
+    );
+
+    // Previous: path of chords that led TO this node (incoming edges, then recurse)
+    // Order: most recent first (immediate predecessors, then their predecessors, etc.)
+    const MAX_PREV = 5;
+    const previousNodes: Node[] = [];
+    const seenUuids = new Set<string>();
+    let layer: Node[] = [node];
+    while (layer.length > 0 && previousNodes.length < MAX_PREV) {
+      const nextLayer: Node[] = [];
+      for (const n of layer) {
+        const incoming = dedupedRelations.filter((r) => r.target_node === n.uuid);
+        for (const rel of incoming) {
+          const src = deduplicatedNodes.nodes.find((x) => x.uuid === rel.source_node);
+          if (src && !seenUuids.has(src.uuid)) {
+            seenUuids.add(src.uuid);
+            nextLayer.push(src);
+          }
+        }
+      }
+      const deduped = nextLayer.filter((n, i, arr) => arr.findIndex((x) => x.name === n.name) === i);
+      previousNodes.push(...deduped.sort((a, b) => b.depth - a.depth)); // higher depth = more recent
+      layer = nextLayer;
+      if (previousNodes.length >= MAX_PREV) break;
+    }
+
+    const notesMap: Record<string, string[]> = {};
+    notesMap[node.name] = chromaToNotes(node.chroma);
+    previousNodes.forEach((n) => {
+      notesMap[n.name] = chromaToNotes(n.chroma);
+    });
+    nextDeduped.forEach((n) => {
+      notesMap[n.name] = chromaToNotes(n.chroma);
+    });
+
+    const seed: HistorySeed = {
+      current: { id: `history-${node.uuid}`, chordId: node.name },
+      previous: previousNodes.slice(0, MAX_PREV).map((n, i) => ({
+        id: `history-prev-${i}-${n.uuid}`,
+        chordId: n.name,
+      })),
+      next: nextDeduped.map((n, i) => ({
+        id: `history-next-${i}-${n.uuid}`,
+        chordId: n.name,
+        probability: 0.8,
+      })),
+      notesMap,
+    };
+    try {
+      sessionStorage.setItem(HISTORY_SEED_KEY, JSON.stringify(seed));
+      router.push("/?fromHistory=1");
+    } catch (e) {
+      console.error("Failed to save history seed:", e);
+    }
+  }
+
   return (
     <div className="min-h-screen relative p-8 font-[family-name:var(--font-patrick-hand)]">
       <Background />
@@ -483,11 +558,20 @@ export default function History() {
                     const x = node.depth * 120 + 60;
                     const y = nodesAtDepth.indexOf(node) * 60 + 40;
 
-                    // Check if this node was actually played (has outgoing edges)
+                    // Check if this node was actually played (has outgoing edges) — affects styling
                     const wasPlayed = dedupedRelations.some(r => r.source_node === node.uuid);
 
                     return (
-                      <g key={node.uuid}>
+                      <g
+                        key={node.uuid}
+                        className="cursor-pointer"
+                        onClick={() => handleNodeClick(node)}
+                        onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && handleNodeClick(node)}
+                        role="button"
+                        tabIndex={0}
+                        aria-label={`Play from ${node.name}`}
+                      >
+                        <title>Click to play from here</title>
                         {/* Node circle */}
                         <circle
                           cx={x}
@@ -497,6 +581,13 @@ export default function History() {
                           stroke={wasPlayed ? "#a890e8" : "#c8b8d8"}
                           strokeWidth={wasPlayed ? "2" : "1"}
                           opacity={wasPlayed ? "1" : "0.7"}
+                          style={
+                            wasPlayed
+                              ? {
+                                  filter: "drop-shadow(0 0 4px rgba(120, 104, 192, 0.4))",
+                                }
+                              : undefined
+                          }
                         />
                         {/* Node label */}
                         <text
@@ -507,6 +598,7 @@ export default function History() {
                           fill={wasPlayed ? "white" : "#5c4a6c"}
                           fontSize="10"
                           fontWeight="bold"
+                          pointerEvents="none"
                         >
                           {node.name.substring(0, 3)}
                         </text>
@@ -517,6 +609,7 @@ export default function History() {
                           textAnchor="middle"
                           fill="#7c6c8c"
                           fontSize="8"
+                          pointerEvents="none"
                         >
                           d:{node.depth}
                         </text>

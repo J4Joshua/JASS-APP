@@ -30,3 +30,10 @@ export interface SavedSong {
 export type ChordEvent =
   | { type: 'CHORD_CHANGE'; payload: ChordGraphState }
   | { type: 'RESET' };
+
+export type HistorySeed = {
+  current: { id: string; chordId: string };
+  previous: { id: string; chordId: string }[];
+  next: { id: string; chordId: string; probability?: number }[];
+  notesMap: Record<string, string[]>;
+};

@@ -117,7 +117,7 @@ def suggest_next_chords(
     tension = minmax01(tension_raw)
 
     if goal == "tension":
-        goal = 0.5 + rng.uniform(low=-0.05, high=0.05, size=None)
+        goal = 0.3 + rng.uniform(low=-0.05, high=0.05, size=None)
     elif goal == "resolve":
         goal = 0.1 + rng.uniform(low=-0.05, high=0.05, size=None)
     elif goal == "resonant":
