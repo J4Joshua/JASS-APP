@@ -13,6 +13,8 @@ interface ChordNodeProps {
   showNotes?: boolean;
   showKeyboard?: boolean;
   notes?: string[]; // Accept notes as prop from backend
+  /** When a suggestion is played, animate from this position (slide up to center) */
+  animateFromPosition?: { x: number; y: number };
 }
 
 /** Visual config for each role's sphere — iridescent soap bubble style. */
@@ -205,7 +207,8 @@ export function ChordNodeComponent({
   role,
   showNotes = true,
   showKeyboard = true,
-  notes = []
+  notes = [],
+  animateFromPosition,
 }: ChordNodeProps) {
   const config = ROLE_CONFIG[role];
   const { radius } = config;
@@ -230,15 +233,22 @@ export function ChordNodeComponent({
   const rippleColor = `${cc.base}44`;
   const rippleStroke = `${cc.deep}30`;
   const shadowColor = `${cc.deep}30`;
+  const isSlidingUp = !!animateFromPosition;
 
   return (
-    <g transform={`translate(${x}, ${y})`}>
-      <motion.g
-        initial={{ opacity: 0, scale: 0.85 }}
-        animate={{ opacity, scale: 1 }}
-        exit={{ opacity: 0, scale: 0.85 }}
-        transition={{ duration: 0.25, ease: 'easeOut' }}
-      >
+    <motion.g
+      initial={
+        isSlidingUp
+          ? { x: animateFromPosition.x, y: animateFromPosition.y, opacity: 1, scale: 1 }
+          : { x, y, opacity: 0, scale: 0.98 }
+      }
+      animate={{ x, y, opacity, scale: 1 }}
+      exit={{ x, y, opacity: 0, scale: 0.98 }}
+      transition={{
+        duration: isSlidingUp ? 0.4 : 0.22,
+        ease: isSlidingUp ? [0.22, 0.61, 0.36, 1] : [0.4, 0, 0.2, 1],
+      }}
+    >
         <g>
           <animateTransform
             attributeName="transform"
@@ -437,6 +447,5 @@ export function ChordNodeComponent({
           )}
         </g>
       </motion.g>
-    </g>
   );
 }

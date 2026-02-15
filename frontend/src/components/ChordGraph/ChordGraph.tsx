@@ -6,6 +6,7 @@ import { ChordEdge } from './ChordEdge';
 
 interface ChordGraphProps {
   state: ChordGraphState;
+  previousState?: ChordGraphState | null;
   showNotes?: boolean;
   keyboardMode?: boolean;
   notesMap?: Record<string, string[]>; // Map chord IDs to their notes
@@ -81,12 +82,24 @@ function AmbientParticles() {
 
 export function ChordGraph({
   state,
+  previousState,
   showNotes = true,
   keyboardMode = false,
   notesMap = {},
   activeNotes,
 }: ChordGraphProps) {
   const { current, next } = state;
+
+  // When a suggestion is played, it becomes current — find which slot it came from for slide-up animation
+  const promotedFrom =
+    previousState &&
+    current.chordId !== previousState.current.chordId &&
+    previousState.next.some((n) => n.chordId === current.chordId)
+      ? previousState.next.findIndex((n) => n.chordId === current.chordId)
+      : -1;
+  const centerPos = getAbsPos('center');
+  const promotedInitialPosition =
+    promotedFrom >= 0 ? getAbsPos(`next-${promotedFrom}` as SlotId) : undefined;
 
   const allNodes = [
     { node: current, slot: 'center' as SlotId, role: 'current' as const },
@@ -97,15 +110,12 @@ export function ChordGraph({
     })),
   ];
 
-  const centerPos = getAbsPos('center');
-  const edges = [
-    ...next.map((node, i) => ({
-      key: `edge-next-${node.id}`,
-      from: centerPos,
-      to: getAbsPos(`next-${i}` as SlotId),
-      variant: 'next' as const,
-    })),
-  ];
+  const edges = next.map((node, i) => ({
+    key: `edge-next-${i}`,
+    from: centerPos,
+    to: getAbsPos(`next-${i}` as SlotId),
+    variant: 'next' as const,
+  }));
 
   return (
     <svg
@@ -172,18 +182,19 @@ export function ChordGraph({
         ))}
       </AnimatePresence>
 
-      {/* Nodes layer */}
+      {/* Nodes layer — stable keys (slot + chordId) so only changed chords animate */}
       <AnimatePresence mode="popLayout">
         {allNodes.map(({ node, slot, role }) => {
           const pos = getAbsPos(slot);
-          // Current chord: use live activeNotes from backend (actual held keys); others: use notesMap (chord spellings)
+          // Current chord: use live activeNotes when available; otherwise fall back to notesMap (covers initial load + first chord)
           const notes =
-            role === "current" && activeNotes !== undefined
-              ? activeNotes
+            role === "current"
+              ? ((activeNotes?.length ?? 0) > 0 ? (activeNotes ?? []) : (notesMap[node.chordId] || []))
               : (notesMap[node.chordId] || []);
+          const isPromoted = role === 'current' && promotedFrom >= 0 && promotedInitialPosition;
           return (
             <ChordNodeComponent
-              key={node.id}
+              key={`${slot}-${node.chordId}`}
               node={node}
               x={pos.x}
               y={pos.y}
@@ -191,6 +202,7 @@ export function ChordGraph({
               showNotes={showNotes}
               showKeyboard={keyboardMode}
               notes={notes}
+              animateFromPosition={isPromoted ? promotedInitialPosition : undefined}
             />
           );
         })}
