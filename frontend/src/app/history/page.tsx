@@ -75,6 +75,12 @@ export default function History() {
   const [isLoadingSongs, setIsLoadingSongs] = useState(false);
   const [songsError, setSongsError] = useState<string | null>(null);
   const [chordProgression, setChordProgression] = useState<string | null>(null);
+  const [isGeneratingTrack, setIsGeneratingTrack] = useState(false);
+  const [generateTrackError, setGenerateTrackError] = useState<string | null>(null);
+  const [generateTrackSuccess, setGenerateTrackSuccess] = useState<string | null>(null);
+  const [isCreatingSong, setIsCreatingSong] = useState(false);
+  const [songMidiBase64, setSongMidiBase64] = useState<string | null>(null);
+  const [createSongError, setCreateSongError] = useState<string | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
@@ -99,6 +105,8 @@ export default function History() {
       setRecommendedSongs([]);
       setSongsError(null);
       setChordProgression(null);
+      setSongMidiBase64(null);
+      setCreateSongError(null);
     } catch (err) {
       console.error("Failed to load session:", err);
     }
@@ -135,6 +143,108 @@ export default function History() {
       setIsLoadingSongs(false);
     }
   }
+
+  function getPlayedChordNames(session: SessionData): string[] {
+    const sourceNodeIds = new Set(session.relations.map((rel) => rel.source_node));
+    const playedNodes = session.nodes.filter((node) => sourceNodeIds.has(node.uuid));
+    playedNodes.sort((a, b) => a.depth - b.depth);
+    return playedNodes.map((node) => node.name).filter((name) => name);
+  }
+
+  async function generateTrack() {
+    if (!selectedSession) return;
+
+    const chordNames = getPlayedChordNames(selectedSession);
+    if (chordNames.length === 0) {
+      setGenerateTrackError("No chords found for this session.");
+      return;
+    }
+
+    const endpoint =
+      process.env.NEXT_PUBLIC_TRACK_API_URL || "http://localhost:8000/generate-track";
+
+    setIsGeneratingTrack(true);
+    setGenerateTrackError(null);
+    setGenerateTrackSuccess(null);
+
+    try {
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          session_timestamp: selectedSession.timestamp,
+          chords: chordNames,
+        }),
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(errText || "Failed to generate track");
+      }
+
+      const data = await response.json().catch(() => null);
+      setGenerateTrackSuccess(data?.message || "Track generation request sent.");
+    } catch (err) {
+      setGenerateTrackError(err instanceof Error ? err.message : "Failed to generate track");
+    } finally {
+      setIsGeneratingTrack(false);
+    }
+  }
+
+  function getPlayedChords(): string[] {
+    if (!selectedSession) return [];
+    const sourceNodeIds = new Set(selectedSession.relations.map((r) => r.source_node));
+    return selectedSession.nodes
+      .filter((n) => sourceNodeIds.has(n.uuid))
+      .sort((a, b) => a.depth - b.depth)
+      .map((n) => n.name);
+  }
+
+  async function createSong() {
+    const chords = getPlayedChords();
+    if (chords.length === 0) {
+      setCreateSongError("No played chords found in this session");
+      return;
+    }
+
+    setIsCreatingSong(true);
+    setCreateSongError(null);
+    setSongMidiBase64(null);
+
+    try {
+      const response = await fetch("http://localhost:8000/create-song", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chords }),
+      });
+      const data = await response.json();
+
+      if (data.error) {
+        setCreateSongError(data.error);
+      } else {
+        setSongMidiBase64(data.midi_base64);
+      }
+    } catch (err) {
+      setCreateSongError(err instanceof Error ? err.message : "Failed to create song");
+    } finally {
+      setIsCreatingSong(false);
+    }
+  }
+
+  function downloadMidi() {
+    if (!songMidiBase64) return;
+    const bytes = atob(songMidiBase64);
+    const arr = new Uint8Array(bytes.length);
+    for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+    const blob = new Blob([arr], { type: "audio/midi" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `jazz-song-${Date.now()}.mid`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
 
   function connect() {
     if (wsRef.current) {
@@ -441,6 +551,10 @@ export default function History() {
                   <p className="text-xs mb-3 text-red-500">{songsError}</p>
                 )}
 
+                {createSongError && (
+                  <p className="text-xs mb-3 text-red-500">{createSongError}</p>
+                )}
+
                 {recommendedSongs.length > 0 ? (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                     {recommendedSongs.map((song, idx) => (
@@ -493,9 +607,48 @@ export default function History() {
                     ))}
                   </div>
                 ) : !isLoadingSongs && !songsError && !chordProgression && (
-                  <div className="text-xs" style={{ color: "#9ca3af" }}>
-                    <p className="mb-2">Click "Get Recommendations" to find songs that use a similar progression.</p>
+                  <div className="text-xs" style={{ color: "#9c8ca8" }}>
+                    <p className="mb-2">Find music recommendations for songs that use a similar progression.</p>
                   </div>
+                )}
+              </div>
+
+              {/* Track Generation */}
+              <div className="rounded-xl p-4" style={cardStyle}>
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <h3 className="text-xs" style={{ color: "#7c6c8c" }}>Generate Track</h3>
+                    <p className="text-xs mt-1" style={{ color: "#9c8ca8" }}>
+                      Practice with a custom backing track based on the chords you played.
+                    </p>
+                  </div>
+                  <button
+                    onClick={generateTrack}
+                    disabled={isGeneratingTrack}
+                    className="px-3 py-1 rounded-lg text-xs font-medium text-white transition-all hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed"
+                    style={{
+                      background: "linear-gradient(160deg, #a888d8 0%, #9070c8 100%)",
+                      boxShadow: "0 2px 8px rgba(144, 112, 216, 0.35), inset 0 1px 0 rgba(255,255,255,0.2)",
+                    }}
+                  >
+                    {isGeneratingTrack ? "Sending..." : "Generate Track"}
+                  </button>
+                </div>
+
+                {selectedSession && (
+                  <p className="text-xs" style={{ color: "#5c4a6c" }}>
+                    <span style={{ color: "#7c6c8c" }}>Chord count:</span>{" "}
+                    {getPlayedChordNames(selectedSession).length}
+                  </p>
+                )}
+
+                {generateTrackError && (
+                  <p className="text-xs mt-2 text-red-500">{generateTrackError}</p>
+                )}
+                {generateTrackSuccess && (
+                  <p className="text-xs mt-2" style={{ color: "#5c4a6c" }}>
+                    {generateTrackSuccess}
+                  </p>
                 )}
               </div>
 

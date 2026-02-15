@@ -23,6 +23,7 @@ export default function Home() {
   const [suggestions, setSuggestions] = useState<ChordMsg["suggestions"]>([]);
   const [lastSuggestions, setLastSuggestions] = useState<ChordMsg["suggestions"]>([]);
   const [log, setLog] = useState<string[]>([]);
+  const [difficulty, setDifficulty] = useState<"easy" | "hard">("easy");
   const wsRef = useRef<WebSocket | null>(null);
   const logRef = useRef<HTMLDivElement>(null);
   const playAreaRef = useRef<HTMLDivElement>(null);
@@ -114,6 +115,13 @@ export default function Home() {
     return notesMap;
   }
 
+  function sendDifficulty(diff: "easy" | "hard") {
+    setDifficulty(diff);
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: "set_difficulty", difficulty: diff }));
+    }
+  }
+
   function addLog(msg: string) {
     setLog((prev) => [...prev.slice(-99), `${new Date().toLocaleTimeString()} ${msg}`]);
   }
@@ -133,6 +141,7 @@ export default function Home() {
       demoModeRef.current = false; // Switch to live mode when connected
       addLog("Connected!");
       console.log("✅ WebSocket CONNECTED");
+      ws.send(JSON.stringify({ type: "set_difficulty", difficulty }));
     };
 
     ws.onmessage = (e) => {
@@ -509,6 +518,52 @@ export default function Home() {
           >
             Demo
           </button>
+
+          {/* Difficulty toggle */}
+          <div
+            className="flex rounded-lg overflow-hidden"
+            style={{
+              border: '1px solid rgba(196, 184, 208, 0.5)',
+              boxShadow: '0 2px 6px rgba(168, 140, 200, 0.15)',
+            }}
+          >
+            <button
+              onClick={() => sendDifficulty("easy")}
+              className="px-3 py-1.5 text-sm font-medium transition-all"
+              style={
+                difficulty === "easy"
+                  ? {
+                      background: 'linear-gradient(160deg, #9080d8 0%, #7868c0 100%)',
+                      color: '#fff',
+                      boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.2)',
+                    }
+                  : {
+                      background: 'rgba(248, 244, 252, 0.4)',
+                      color: '#8878a0',
+                    }
+              }
+            >
+              Easy
+            </button>
+            <button
+              onClick={() => sendDifficulty("hard")}
+              className="px-3 py-1.5 text-sm font-medium transition-all"
+              style={
+                difficulty === "hard"
+                  ? {
+                      background: 'linear-gradient(160deg, #d87888 0%, #c06078 100%)',
+                      color: '#fff',
+                      boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.2)',
+                    }
+                  : {
+                      background: 'rgba(248, 244, 252, 0.4)',
+                      color: '#8878a0',
+                    }
+              }
+            >
+              Hard
+            </button>
+          </div>
         </div>
 
         {historyBannerChord && (
