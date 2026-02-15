@@ -113,6 +113,7 @@ export default function Home() {
 
     ws.onopen = () => {
       setStatus("connected");
+      demoModeRef.current = false; // Switch to live mode when connected
       addLog("Connected!");
       console.log("✅ WebSocket CONNECTED");
     };
@@ -151,8 +152,9 @@ export default function Home() {
           console.log("  Base State:", baseState);
           console.log("  Notes Map:", transformedNotesMap);
 
-          if (baseState) {
+          if (baseState && !demoModeRef.current) {
             // New chord: add old current to front of history; only drop the oldest (tail) when over max
+            // Skip when demoMode is true so Demo state isn't overwritten by live chords
             setChordGraphState((prev) => {
               if (!prev) return baseState;
               const chordChanged =
@@ -278,7 +280,7 @@ export default function Home() {
 
   const fallbackNotesMap = { "?": [] };
 
-  // Demo mode: cycle through chord states — each shows history of how we got there (C → F → Am → G)
+  // Demo mode: 0→1→2→3→4→5, then sticks at 5 and add-one-drop-earliest
   const DEMO_STATES: { state: ChordGraphState; notesMap: Record<string, string[]> }[] = [
     {
       state: {
@@ -335,24 +337,95 @@ export default function Home() {
       },
       notesMap: { G: ["G", "B", "D"], C: ["C", "E", "G"], Am: ["A", "C", "E"], D: ["D", "F#", "A"], F: ["F", "A", "C"] },
     },
+    {
+      state: {
+        current: { id: "d5-c", chordId: "C" },
+        previous: [
+          { id: "d5-p0", chordId: "G" },
+          { id: "d5-p1", chordId: "Am" },
+          { id: "d5-p2", chordId: "F" },
+          { id: "d5-p3", chordId: "C" },
+        ],
+        next: [
+          { id: "d5-n0", chordId: "F", probability: 0.95 },
+          { id: "d5-n1", chordId: "G", probability: 0.8 },
+          { id: "d5-n2", chordId: "Am", probability: 0.6 },
+        ],
+      },
+      notesMap: { C: ["C", "E", "G"], F: ["F", "A", "C"], G: ["G", "B", "D"], Am: ["A", "C", "E"] },
+    },
+    {
+      state: {
+        current: { id: "d6-c", chordId: "F" },
+        previous: [
+          { id: "d6-p0", chordId: "C" },
+          { id: "d6-p1", chordId: "G" },
+          { id: "d6-p2", chordId: "Am" },
+          { id: "d6-p3", chordId: "F" },
+          { id: "d6-p4", chordId: "C" },
+        ],
+        next: [
+          { id: "d6-n0", chordId: "G", probability: 0.9 },
+          { id: "d6-n1", chordId: "Am", probability: 0.7 },
+          { id: "d6-n2", chordId: "C", probability: 0.65 },
+        ],
+      },
+      notesMap: { F: ["F", "A", "C"], G: ["G", "B", "D"], Am: ["A", "C", "E"], C: ["C", "E", "G"] },
+    },
   ];
   const [demoIndex, setDemoIndex] = useState(0);
-  const [demoDirection, setDemoDirection] = useState<1 | -1>(1); // 1 = forward, -1 = reverse
+  const demoModeRef = useRef(false); // When true, WebSocket chord updates are ignored (Demo takes over)
+  const CHORD_CYCLE = ["C", "F", "Am", "G"] as const;
+  const DEMO_NEXT: Record<string, ChordGraphState["next"]> = {
+    C: [
+      { id: "next-0", chordId: "F", probability: 0.8 },
+      { id: "next-1", chordId: "G", probability: 0.75 },
+      { id: "next-2", chordId: "Am", probability: 0.85 },
+    ],
+    F: [
+      { id: "next-0", chordId: "G", probability: 0.9 },
+      { id: "next-1", chordId: "Am", probability: 0.7 },
+      { id: "next-2", chordId: "C", probability: 0.65 },
+    ],
+    Am: [
+      { id: "next-0", chordId: "F", probability: 0.88 },
+      { id: "next-1", chordId: "G", probability: 0.72 },
+      { id: "next-2", chordId: "Em", probability: 0.6 },
+    ],
+    G: [
+      { id: "next-0", chordId: "C", probability: 0.95 },
+      { id: "next-1", chordId: "Am", probability: 0.8 },
+      { id: "next-2", chordId: "D", probability: 0.5 },
+    ],
+  };
   const cycleDemo = () => {
-    // Cycle 0→1→2→3→2→1→2→3... (ping-pong, never back to 0) — history grows then shrinks gradually
+    demoModeRef.current = true; // Take over from live state when user clicks Demo
     const n = DEMO_STATES.length;
-    let nextIndex = demoIndex + demoDirection;
-    if (nextIndex >= n) {
-      nextIndex = n - 2; // 3 → 2
-      setDemoDirection(-1);
-    } else if (nextIndex < 1) {
-      nextIndex = 2; // bounce at 1: go 1→2 (reverse direction)
-      setDemoDirection(1);
+    const maxIdx = n - 1; // 5
+
+    if (demoIndex < maxIdx) {
+      // 0→1→2→3→4→5: advance to next state
+      const nextIndex = demoIndex + 1;
+      const next = DEMO_STATES[nextIndex];
+      setDemoIndex(nextIndex);
+      setChordGraphState(next.state);
+      setNotesMap(next.notesMap);
+    } else {
+      // Sticks at 5: add one to history, drop the earliest
+      setChordGraphState((prev) => {
+        const cycleIdx = CHORD_CYCLE.indexOf(prev.current.chordId as (typeof CHORD_CYCLE)[number]);
+        const nextChordId = CHORD_CYCLE[(cycleIdx + 1) % CHORD_CYCLE.length];
+        const newPrevious = [
+          { id: `prev-${Date.now()}`, chordId: prev.current.chordId },
+          ...prev.previous,
+        ].slice(0, 5);
+        return {
+          current: { id: `current-${Date.now()}`, chordId: nextChordId },
+          previous: newPrevious,
+          next: DEMO_NEXT[nextChordId] ?? prev.next,
+        };
+      });
     }
-    const next = DEMO_STATES[nextIndex];
-    setDemoIndex(nextIndex);
-    setChordGraphState(next.state);
-    setNotesMap(next.notesMap);
   };
 
   return (
