@@ -11,7 +11,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-from .chroma_index import bits_to_mask, chroma_bits_to_notes, filter_slash_suggestions
+from .chroma_index import chroma_bits_to_notes, filter_slash_suggestions
 from .tis_index import TISIndex
 from .tonal_tension import DEFAULT_WEIGHTS, parse_key
 from .tonal_tension.model import suggest_next_chords as _suggest_next_chords
@@ -31,7 +31,6 @@ def _load_index(index: str | Path | TISIndex) -> TISIndex:
 def suggest_chords(
     *,
     chord: str | None = None,
-    chroma: Sequence[int] | None = None,
     progression: Sequence[str] | None = None,
     key: str,
     index: str | Path | TISIndex = "tis_index.npz",
@@ -39,9 +38,11 @@ def suggest_chords(
     goal: str = "resolve",
     weights: Mapping[str, float] | None = None,
     normalize: bool = True,
-    voice_leading_addition_penalty: int = 4,
     flats: bool = False,
     include_aliases: bool = False,
+    min_notes: int | None = 3,
+    max_notes: int | None = 5,
+    d3_function_weights: Mapping[str, float] | None = None,
 ) -> dict[str, Any]:
     """Suggest next chords.
 
@@ -51,8 +52,7 @@ def suggest_chords(
         Current chord name. If ``progression`` is provided and ``chord`` is None,
         it defaults to the last chord of the progression.
     progression:
-        Optional progression context ending in ``chord``. If provided, hierarchical
-        tension is computed for each candidate as if appended.
+        Optional progression context ending in ``chord``.
     key:
         Human-friendly key string, e.g. ``"C"``, ``"Am"``, ``"F# minor"``.
     index:
@@ -65,12 +65,12 @@ def suggest_chords(
         Optional override mapping for feature weights.
     normalize:
         If True, min-max normalizes each feature before weighting.
-    voice_leading_addition_penalty:
-        Insertion/deletion semitone penalty for voice-leading when chord sizes differ.
     flats:
         If True, spell note names with flats (db/eb/gb/ab/bb).
     include_aliases:
         If True, include alias lists for each result (can be large).
+    min_notes, max_notes:
+        If set, filters suggestions to chords whose pitch-class set size is within bounds.
 
     Returns
     -------
@@ -86,20 +86,8 @@ def suggest_chords(
             chosen_chord = prog_list[-1]
         elif chosen_chord != prog_list[-1]:
             raise ValueError("chord must match the last chord in progression.")
-
-    # Resolve prev_row from chroma if provided, bypassing name lookup
-    resolved_row: int | None = None
-    if chroma is not None:
-        mask = bits_to_mask(list(chroma))
-        mask_to_row = idx.build_mask_to_row()
-        resolved_row = mask_to_row.get(mask)
-        if resolved_row is None:
-            raise ValueError(f"Chroma {list(chroma)} not found in index.")
-        if chosen_chord is None:
-            chosen_chord = str(idx.rep_names[resolved_row])
-
     if chosen_chord is None:
-        raise ValueError("Either chord, chroma, or progression must be provided.")
+        raise ValueError("Either chord or progression must be provided.")
 
     results = _suggest_next_chords(
         idx,
@@ -109,10 +97,10 @@ def suggest_chords(
         top=top,
         weights=dict(weights) if weights is not None else None,
         goal=goal,
-        progression=prog_list,
         normalize=normalize,
-        voice_leading_addition_penalty=voice_leading_addition_penalty,
-        prev_row=resolved_row,
+        min_notes=min_notes,
+        max_notes=max_notes,
+        d3_function_weights=dict(d3_function_weights) if d3_function_weights is not None else None,
     )
 
     # Post-process notes + aliases for backend convenience.
@@ -135,6 +123,7 @@ def suggest_chords(
         },
         "goal": goal,
         "weights": dict(weights) if weights is not None else dict(DEFAULT_WEIGHTS),
+        "d3_function_weights": dict(d3_function_weights) if d3_function_weights is not None else None,
         "results": results,
         "meta": idx.meta,
     }
