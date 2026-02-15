@@ -14,10 +14,13 @@ import threading
 import uuid
 from dataclasses import dataclass, asdict
 from pathlib import Path
-
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
+from perplexity import Perplexity
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Ensure backend/ is on sys.path so jass package resolves
 _backend_dir = str(Path(__file__).resolve().parent.parent)
@@ -62,6 +65,7 @@ clients: set[WebSocket] = set()
 loop: asyncio.AbstractEventLoop | None = None
 tis_idx: TISIndex | None = None
 queue: asyncio.Queue[frozenset[int]] = asyncio.Queue()
+spotify_client = None
 
 # Graph tracking state
 last_chroma: tuple[int, ...] | None = None
@@ -132,23 +136,6 @@ async def chord_worker():
         chroma = [1 if i in pitch_classes else 0 for i in range(12)]
         chroma_key = tuple(chroma)
         names = [NOTE_NAMES[pc] for pc in sorted(pitch_classes)]
-
-        # chord_name: str | None = None
-        # if len(names) >= 2:
-        #     chords = find_chords_from_notes(names)
-        #     if chords:
-        #         chord_name = str(chords[0])
-        # if chord_name is None:
-        #     chord_name = "-".join(names) if names else "?"
-
-        # print(f"[chord_worker] detected: {chord_name!r}  notes: {names}  chroma={list(chroma_key)}", file=sys.stderr)
-
-        # # Gate: if we have suggestions, only accept chords whose chroma matches
-        # if allowed_suggestions and chroma_key not in allowed_suggestions:
-        #     print(f"[chord_worker] REJECTED {chord_name!r}  played={list(chroma_key)}  allowed={[list(c) for c in allowed_suggestions]}", file=sys.stderr)
-        #     continue
-
-        # print(f"[chord_worker] ACCEPTED {chord_name!r}  chroma={list(chroma_key)}", file=sys.stderr)
 
         # Get suggestions for accepted chord
         suggestions = await asyncio.to_thread(
@@ -338,6 +325,156 @@ async def end_session():
         "session": session_data,
     }
 
+@app.get("/recommend-songs/{filename}")
+async def recommend_songs(filename: str):
+    """
+    Get song recommendations based on the last 5 played chords
+    from a session using the Perplexity API.
+    """
+    try:
+        # Load session
+        session_file = Path(__file__).resolve().parent / "sessions" / filename
+        
+        # Security: only allow session_*.json files
+        if not filename.startswith("session_") or not filename.endswith(".json"):
+            return {"error": "Invalid filename"}
+        
+        if not session_file.exists():
+            return {"error": "Session not found"}
+        
+        with open(session_file, "r") as f:
+            session_data = json.load(f)
+        
+        # Extract played chords (nodes that have outgoing edges)
+        nodes = session_data.get("nodes", [])
+        relations = session_data.get("relations", [])
+        
+        source_node_ids = {rel["source_node"] for rel in relations}
+        played_nodes = [n for n in nodes if n["uuid"] in source_node_ids]
+        
+        # Sort by depth to get the progression order
+        played_nodes.sort(key=lambda n: n["depth"])
+        
+        # Get the last 5 played chords
+        last_5_chords = played_nodes[-5:]
+        chord_names = [n["name"] for n in last_5_chords]
+        chord_progression = " -> ".join(chord_names)
+        
+        print(f"[recommend_songs] Chord progression: {chord_progression}", file=sys.stderr)
+        
+        # Call Perplexity API
+        client = Perplexity(api_key=os.environ.get("PERPLEXITY_API_KEY"))
+        
+        prompt = f"Retrieve 5 songs that have similar chord progressions to {chord_progression}. Return just the song titles and artists, one per line."
+        
+        completion = client.chat.completions.create(
+            model="sonar-pro",
+            messages=[
+                {"role": "user", "content": prompt}
+            ]
+        )
+        
+        response_text = completion.choices[0].message.content
+        
+        # Parse the response into a list of songs
+        # Response format: Song Title - Artist\n♪\nExplanation...
+        song_titles = []
+        lines = response_text.split("\n")
+        
+        for line in lines:
+            line = line.strip()
+            # Skip empty lines, separator lines (♪), citations, and explanations
+            if not line or line == "♪" or line.startswith("[") or line.startswith("Uses") or line.startswith("Employs") or line.startswith("Features"):
+                continue
+            # Remove markdown formatting
+            line = line.replace("**", "").strip()
+            # Look for lines with dash (likely song title - artist format)
+            if " - " in line and len(line) > 5 and not line.startswith(("The ", "This ", "A ")):
+                song_titles.append(line)
+        
+        # Deduplicate
+        song_titles = list(dict.fromkeys(song_titles))[:5]  # Keep only first 5
+        
+        print(f"[recommend_songs] Parsed {len(song_titles)} songs from Perplexity: {song_titles}", file=sys.stderr)
+        
+        # Enrich with Spotify data
+        enriched_songs = []
+        if spotify_client:
+            for song_title in song_titles:
+                try:
+                    # Search Spotify for the song
+                    results = await asyncio.to_thread(
+                        spotify_client.search, q=song_title, type="track", limit=1
+                    )
+                    
+                    if results and results["tracks"]["items"]:
+                        track = results["tracks"]["items"][0]
+                        
+                        # Extract relevant data
+                        album_art = None
+                        if track.get("album", {}).get("images"):
+                            # Get the largest image
+                            images = track["album"]["images"]
+                            album_art = images[0]["url"] if images else None
+                        
+                        artists_names = ", ".join([artist["name"] for artist in track.get("artists", [])])
+                        spotify_url = track.get("external_urls", {}).get("spotify")
+                        
+                        enriched_songs.append({
+                            "title": track["name"],
+                            "artists": artists_names,
+                            "album": track.get("album", {}).get("name", ""),
+                            "image_url": album_art,
+                            "spotify_url": spotify_url,
+                            "original_query": song_title,
+                        })
+                    else:
+                        # Fallback if not found on Spotify
+                        enriched_songs.append({
+                            "title": song_title,
+                            "artists": "",
+                            "album": "",
+                            "image_url": None,
+                            "spotify_url": None,
+                            "original_query": song_title,
+                        })
+                except Exception as e:
+                    print(f"[recommend_songs] Error searching Spotify for '{song_title}': {e}", file=sys.stderr)
+                    enriched_songs.append({
+                        "title": song_title,
+                        "artists": "",
+                        "album": "",
+                        "image_url": None,
+                        "spotify_url": None,
+                        "original_query": song_title,
+                    })
+        else:
+            # No Spotify client, return basic info
+            enriched_songs = [
+                {
+                    "title": song_title,
+                    "artists": "",
+                    "album": "",
+                    "image_url": None,
+                    "spotify_url": None,
+                    "original_query": song_title,
+                }
+                for song_title in song_titles
+            ]
+        
+        print(f"[recommend_songs] Enriched {len(enriched_songs)} songs with Spotify data", file=sys.stderr)
+        
+        return {
+            "status": "success",
+            "chord_progression": chord_progression,
+            "songs": enriched_songs,
+        }
+    except Exception as e:
+        print(f"[recommend_songs] Error: {e}", file=sys.stderr)
+        import traceback
+        traceback.print_exc(file=sys.stderr)
+        return {"error": str(e), "status": "failed"}
+
 @app.websocket("/ws")
 async def ws_endpoint(ws: WebSocket):
     await ws.accept()
@@ -353,7 +490,7 @@ async def ws_endpoint(ws: WebSocket):
 
 @app.on_event("startup")
 async def startup():
-    global loop, tis_idx
+    global loop, tis_idx, spotify_client
 
     loop = asyncio.get_running_loop()
 
@@ -364,6 +501,23 @@ async def startup():
         print(f"[ws] TIS index loaded", file=sys.stderr)
     except Exception as e:
         print(f"[ws] TIS index unavailable: {e}", file=sys.stderr)
+
+    # Initialize Spotify client
+    try:
+        import spotipy
+        from spotipy.oauth2 import SpotifyClientCredentials
+        
+        client_id = os.environ.get("SPOTIFY_CLIENT_ID")
+        client_secret = os.environ.get("SPOTIFY_CLIENT_SECRET")
+        
+        if client_id and client_secret:
+            auth_manager = SpotifyClientCredentials(client_id=client_id, client_secret=client_secret)
+            spotify_client = spotipy.Spotify(auth_manager=auth_manager)
+            print(f"[ws] Spotify client initialized", file=sys.stderr)
+        else:
+            print(f"[ws] Spotify credentials not found (SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET)", file=sys.stderr)
+    except Exception as e:
+        print(f"[ws] Spotify client init failed: {e}", file=sys.stderr)
 
     # start the chord detection worker
     asyncio.create_task(chord_worker())

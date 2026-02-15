@@ -7,3 +7,5 @@ __pycache__/
 *.pyo
 
 backend/sessions/
+.env*
+.env
