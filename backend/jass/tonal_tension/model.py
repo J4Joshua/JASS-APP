@@ -9,6 +9,8 @@ from ..tis_index import TISIndex
 from .features import compute_features
 from .weights import DEFAULT_WEIGHTS
 
+rng = np.random.default_rng()
+
 def minmax01(x: np.ndarray) -> np.ndarray:
     x = np.asarray(x, dtype=np.float64)
     finite = np.isfinite(x)
@@ -113,6 +115,13 @@ def suggest_next_chords(
 
     # Normalize final tension to [0, 1] so numeric goals are meaningful on that scale
     tension = minmax01(tension_raw)
+
+    if goal == "tension":
+        goal = 0.5 + rng.uniform(low=-0.05, high=0.05, size=None)
+    elif goal == "resolve":
+        goal = 0.1 + rng.uniform(low=-0.05, high=0.05, size=None)
+    elif goal == "resonant":
+        goal = 0.2 + rng.uniform(low=-0.05, high=0.06, size=None)
 
     try:
         target = float(goal)  # expected to be in [0, 1]
