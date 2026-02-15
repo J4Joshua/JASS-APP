@@ -38,27 +38,35 @@ function getAbsPos(slot: SlotId) {
   };
 }
 
-/** Subtle floating particles for ambient depth. */
-function AmbientParticles() {
-  const particles = Array.from({ length: 20 }, (_, i) => {
-    const isBright = i < 4;
+/** Subtle floating particles — memoized with fixed seed to avoid re-creating on each render. */
+const AMBIENT_PARTICLES = (() => {
+  const seed = (s: number) => (((s * 9301 + 49297) % 233280) / 233280);
+  let s = 12345;
+  return Array.from({ length: 12 }, (_, i) => {
+    s = seed(s) * 233280;
+    const cx = seed(s) * VIEWBOX_W;
+    s = seed(s) * 233280;
+    const cy = seed(s) * VIEWBOX_H;
+    const isBright = i < 3;
     return {
       id: i,
-      cx: Math.random() * VIEWBOX_W,
-      cy: Math.random() * VIEWBOX_H,
-      r: isBright ? 1.5 + Math.random() * 2 : 0.5 + Math.random() * 1,
-      opacity: isBright ? 0.08 + Math.random() * 0.06 : 0.03 + Math.random() * 0.04,
-      dur: 10 + Math.random() * 16,
-      delay: Math.random() * 12,
+      cx,
+      cy,
+      r: isBright ? 1.5 : 0.8,
+      opacity: isBright ? 0.1 : 0.04,
+      dur: 12 + (i % 5) * 2,
+      delay: (i % 7) * 1.5,
       fill: isBright
-        ? ['#f0a0c8', '#d880b0', '#e8b0d0', '#c890c0'][i % 4]
+        ? ['#f0a0c8', '#d880b0', '#e8b0d0'][i % 3]
         : 'rgba(200, 180, 195, 0.5)',
     };
   });
+})();
 
+function AmbientParticles() {
   return (
     <g>
-      {particles.map((p) => (
+      {AMBIENT_PARTICLES.map((p) => (
         <circle key={p.id} cx={p.cx} cy={p.cy} r={p.r} fill={p.fill} opacity={p.opacity}>
           <animate
             attributeName="opacity"

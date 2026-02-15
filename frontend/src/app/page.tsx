@@ -25,6 +25,8 @@ export default function Home() {
   const playAreaRef = useRef<HTMLDivElement>(null);
 
   const [keyboardHeldNotes, setKeyboardHeldNotes] = useState<Set<number>>(new Set());
+  /** Live notes from physical piano (backend MIDI) - for real-time visual feedback */
+  const [livePianoNotes, setLivePianoNotes] = useState<string[] | null>(null);
 
   // Live chord graph state — initialize with sample so suggestions show on load
   const [chordGraphState, setChordGraphState] = useState<ChordGraphState | null>(() => ({
@@ -118,8 +120,14 @@ export default function Home() {
     ws.onmessage = (e) => {
       console.log("📨 Raw WebSocket message received:", e.data);
       try {
-        const data: ChordMsg = JSON.parse(e.data);
+        const data = JSON.parse(e.data) as ChordMsg | { type: "live_notes"; notes: string[] };
         console.log("📦 Parsed data:", data);
+
+        if (data.type === "live_notes") {
+          setLivePianoNotes(data.notes);
+          return;
+        }
+
         if (data.type === "chord") {
           setChord(data.chord);
           setSuggestions(data.suggestions);
@@ -156,6 +164,7 @@ export default function Home() {
 
     ws.onclose = () => {
       setStatus("disconnected");
+      setLivePianoNotes(null);
       addLog("Disconnected");
     };
 
@@ -354,9 +363,11 @@ export default function Home() {
             keyboardMode={true}
             notesMap={notesMap || fallbackNotesMap}
             activeNotes={
-              keyboardHeldNotes.size > 0
-                ? midiNotesToNames(Array.from(keyboardHeldNotes))
-                : (chord?.notes ?? [])
+              livePianoNotes !== null
+                ? livePianoNotes
+                : keyboardHeldNotes.size > 0
+                  ? midiNotesToNames(Array.from(keyboardHeldNotes))
+                  : (chord?.notes ?? [])
             }
           />
         </div>

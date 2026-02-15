@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { motion } from 'framer-motion';
 
 interface ChordEdgeProps {
@@ -9,7 +10,7 @@ interface ChordEdgeProps {
   variant: 'previous' | 'next';
 }
 
-export function ChordEdge({ edgeKey, fromX, fromY, toX, toY, variant }: ChordEdgeProps) {
+function ChordEdgeInner({ edgeKey, fromX, fromY, toX, toY, variant }: ChordEdgeProps) {
   // Calculate control points for a smooth curve
   const dx = toX - fromX;
   const dy = toY - fromY;
@@ -31,15 +32,14 @@ export function ChordEdge({ edgeKey, fromX, fromY, toX, toY, variant }: ChordEdg
       exit={{ opacity: 0, pathLength: 0 }}
       transition={{ duration: 0.4, ease: 'easeOut' }}
     >
-      {/* Glow layer */}
+      {/* Glow layer — no filter for perf */}
       <motion.path
         d={pathD}
         fill="none"
         stroke={strokeColor}
         strokeWidth={strokeWidth + 4}
         strokeLinecap="round"
-        opacity={0.3}
-        filter="url(#sphere-ground-shadow)"
+        opacity={0.25}
       />
       {/* Main line */}
       <motion.path
@@ -53,3 +53,5 @@ export function ChordEdge({ edgeKey, fromX, fromY, toX, toY, variant }: ChordEdg
     </motion.g>
   );
 }
+
+export const ChordEdge = memo(ChordEdgeInner);

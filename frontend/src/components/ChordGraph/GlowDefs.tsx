@@ -10,9 +10,9 @@ export function GlowDefs() {
     <defs>
       {/* ── Blur filters ────────────────────────────────────────── */}
 
-      {/* Ground shadow blur */}
+      {/* Ground shadow blur — reduced stdDeviation for perf */}
       <filter id="sphere-ground-shadow" x="-50%" y="-50%" width="200%" height="200%">
-        <feGaussianBlur in="SourceAlpha" stdDeviation="3" />
+        <feGaussianBlur in="SourceAlpha" stdDeviation="1.5" />
         <feOffset dx="0" dy="1" />
         <feComponentTransfer>
           <feFuncA type="linear" slope="0.3" />
@@ -23,19 +23,19 @@ export function GlowDefs() {
         </feMerge>
       </filter>
 
-      {/* Outer halo blur for current chord */}
+      {/* Outer halo blur for current chord — reduced for framerate */}
       <filter id="sphere-halo" x="-100%" y="-100%" width="300%" height="300%">
-        <feGaussianBlur in="SourceGraphic" stdDeviation="12" />
+        <feGaussianBlur in="SourceGraphic" stdDeviation="4" />
       </filter>
 
       {/* Halo for next chords (smaller) */}
       <filter id="sphere-halo-next" x="-100%" y="-100%" width="300%" height="300%">
-        <feGaussianBlur in="SourceGraphic" stdDeviation="8" />
+        <feGaussianBlur in="SourceGraphic" stdDeviation="3" />
       </filter>
 
       {/* Halo for previous chords (smaller) */}
       <filter id="sphere-halo-prev" x="-100%" y="-100%" width="300%" height="300%">
-        <feGaussianBlur in="SourceGraphic" stdDeviation="6" />
+        <feGaussianBlur in="SourceGraphic" stdDeviation="2" />
       </filter>
 
       {/* Ripple blur */}
@@ -50,51 +50,22 @@ export function GlowDefs() {
 
       {/* ── Distortion filters (liquid wobble) ──────────────────── */}
 
-      {/* Current chord distortion */}
+      {/* Current chord distortion — static (no animate), reduced scale for perf */}
       <filter id="sphere-distort-current">
-        <feTurbulence
-          type="fractalNoise"
-          baseFrequency="0.015"
-          numOctaves="2"
-          seed="42"
-        >
-          <animate
-            attributeName="baseFrequency"
-            values="0.015;0.018;0.015"
-            dur="8s"
-            repeatCount="indefinite"
-          />
-        </feTurbulence>
-        <feDisplacementMap in="SourceGraphic" scale="2.5" />
+        <feTurbulence type="fractalNoise" baseFrequency="0.015" numOctaves="1" seed="42" />
+        <feDisplacementMap in="SourceGraphic" scale="1.5" />
       </filter>
 
       {/* Next chord distortion */}
       <filter id="sphere-distort-next">
-        <feTurbulence
-          type="fractalNoise"
-          baseFrequency="0.018"
-          numOctaves="2"
-          seed="73"
-        >
-          <animate
-            attributeName="baseFrequency"
-            values="0.018;0.021;0.018"
-            dur="9s"
-            repeatCount="indefinite"
-          />
-        </feTurbulence>
-        <feDisplacementMap in="SourceGraphic" scale="2" />
+        <feTurbulence type="fractalNoise" baseFrequency="0.018" numOctaves="1" seed="73" />
+        <feDisplacementMap in="SourceGraphic" scale="1" />
       </filter>
 
-      {/* Previous chord distortion */}
+      {/* Previous chord distortion — minimal */}
       <filter id="sphere-distort-previous">
-        <feTurbulence
-          type="fractalNoise"
-          baseFrequency="0.02"
-          numOctaves="1"
-          seed="91"
-        />
-        <feDisplacementMap in="SourceGraphic" scale="1.5" />
+        <feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="1" seed="91" />
+        <feDisplacementMap in="SourceGraphic" scale="0.8" />
       </filter>
 
       {/* ── Gradient definitions (static, role-based) ──────────── */}
