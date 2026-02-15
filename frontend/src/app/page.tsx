@@ -413,6 +413,7 @@ export default function Home() {
     } else {
       // Sticks at 5: add one to history, drop the earliest
       setChordGraphState((prev) => {
+        if (!prev) return DEMO_STATES[maxIdx].state;
         const cycleIdx = CHORD_CYCLE.indexOf(prev.current.chordId as (typeof CHORD_CYCLE)[number]);
         const nextChordId = CHORD_CYCLE[(cycleIdx + 1) % CHORD_CYCLE.length];
         const newPrevious = [
