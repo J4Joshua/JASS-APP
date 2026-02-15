@@ -451,48 +451,48 @@ export default function History() {
                 )}
 
                 {recommendedSongs.length > 0 ? (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                     {recommendedSongs.map((song, idx) => (
                       <div
                         key={idx}
-                        className="rounded-lg p-3 cursor-pointer transition-all hover:shadow-md aspect-square"
+                        className="rounded-lg p-3 cursor-pointer transition-all hover:shadow-md"
                         style={{
                           background: "rgba(220, 212, 232, 0.3)",
                           border: "1px solid rgba(196, 184, 208, 0.3)",
                         }}
                         onClick={() => song.spotify_url && window.open(song.spotify_url, "_blank")}
                       >
-                        <div className="flex h-full flex-col gap-2">
+                        <div className="flex flex-col gap-2">
                           {song.image_url ? (
                             <img
                               src={song.image_url}
                               alt={song.title}
-                              className="w-full h-20 rounded object-cover"
+                              className="w-full h-32 rounded object-cover"
                             />
                           ) : (
                             <div
-                              className="w-full h-20 rounded flex items-center justify-center"
+                              className="w-full h-32 rounded flex items-center justify-center"
                               style={{ background: "rgba(168, 140, 200, 0.2)" }}
                             >
                               <span style={{ color: "#9c8ca8" }}>♪</span>
                             </div>
                           )}
                           <div className="min-w-0">
-                            <div className="text-xs font-medium" style={{ color: "#5c4a6c" }}>
+                            <div className="text-sm font-medium" style={{ color: "#5c4a6c" }}>
                               {song.title}
                             </div>
                             {song.artists && (
-                              <div className="text-[0.7rem] mt-0.5" style={{ color: "#7c6c8c" }}>
+                              <div className="text-xs mt-0.5" style={{ color: "#7c6c8c" }}>
                                 {song.artists}
                               </div>
                             )}
                             {song.album && (
-                              <div className="text-[0.7rem] mt-0.5 opacity-75" style={{ color: "#9c8ca8" }}>
+                              <div className="text-xs mt-0.5 opacity-75" style={{ color: "#9c8ca8" }}>
                                 {song.album}
                               </div>
                             )}
                             {song.spotify_url && (
-                              <div className="text-[0.7rem] mt-1">
+                              <div className="text-xs mt-1">
                                 <span style={{ color: "#7868c0" }}>▶ Open on Spotify</span>
                               </div>
                             )}
