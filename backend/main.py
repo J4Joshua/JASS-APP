@@ -117,7 +117,7 @@ def _get_suggestions(chord_name: str | None, chroma: list[int]) -> list[dict]:
     if tis_idx is None or (not chord_name and not any(chroma)):
         return []
     try:
-        result = suggest_chords(chord=chord_name, chroma=chroma, key="C", index=tis_idx, top=3, goal="resolve")
+        result = suggest_chords(chord=chord_name, key="C", index=tis_idx, top=3, goal="resolve")
         out = []
         for r in result.get("results", []):
             row = int(r["row"])
