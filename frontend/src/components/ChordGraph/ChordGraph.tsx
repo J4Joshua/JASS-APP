@@ -17,15 +17,19 @@ const VIEWBOX_W = 1200;
 const VIEWBOX_H = 900;
 const CENTER = { x: VIEWBOX_W / 2, y: 280 };
 
+const MAX_HISTORY = 5;
+
 /**
  * Slot positions — current chord is centre,
- * previous chords in an arc above (3 slots), next chords in a row below.
+ * previous chords in an arc above, next chords in a row below.
  */
 const SLOT_POSITIONS = {
   'center': { x: 0, y: 0 },
-  'prev-0': { x: -240, y: -200 },
-  'prev-1': { x: 0, y: -240 },
-  'prev-2': { x: 240, y: -200 },
+  'prev-0': { x: -280, y: -180 },
+  'prev-1': { x: -140, y: -220 },
+  'prev-2': { x: 0, y: -240 },
+  'prev-3': { x: 140, y: -220 },
+  'prev-4': { x: 280, y: -180 },
   'next-0': { x: -360, y: 360 },
   'next-1': { x: 0, y: 360 },
   'next-2': { x: 360, y: 360 },
@@ -34,7 +38,8 @@ const SLOT_POSITIONS = {
 type SlotId = keyof typeof SLOT_POSITIONS;
 
 function getAbsPos(slot: SlotId): { x: number; y: number } {
-  const offset = SLOT_POSITIONS[slot] ?? { x: 0, y: 0 };
+  const key = slot as keyof typeof SLOT_POSITIONS;
+  const offset = SLOT_POSITIONS[key] ?? { x: 0, y: 0 };
   return { x: CENTER.x + offset.x, y: CENTER.y + offset.y };
 }
 
@@ -121,7 +126,7 @@ export function ChordGraph({
   };
 
   const allNodes = [
-    ...previous.slice(0, 3).map((node, i) => {
+    ...previous.slice(0, MAX_HISTORY).map((node, i) => {
       const { pos, scale } = getPrevAnimateFrom(i, node.chordId);
       return {
         node,
@@ -141,7 +146,7 @@ export function ChordGraph({
     })),
   ];
 
-  // Previous edges: flow from center (current) back through history — center → prev-0 → prev-1 → prev-2
+  // Previous edges: flow from center (current) back through history — center → prev-0 → prev-1 → ...
   const prevEdges = (() => {
     if (previous.length === 0) return [];
     const result: { key: string; from: { x: number; y: number }; to: { x: number; y: number }; variant: 'previous' }[] = [];

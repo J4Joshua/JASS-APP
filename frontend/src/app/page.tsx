@@ -152,7 +152,7 @@ export default function Home() {
           console.log("  Notes Map:", transformedNotesMap);
 
           if (baseState) {
-            // New chord: push old current into previous (max 3, oldest popped)
+            // New chord: add old current to front of history; only drop the oldest (tail) when over max
             setChordGraphState((prev) => {
               if (!prev) return baseState;
               const chordChanged =
@@ -163,7 +163,7 @@ export default function Home() {
                 ? [
                     { id: `prev-${Date.now()}`, chordId: prev.current.chordId },
                     ...prev.previous,
-                  ].slice(0, 3)
+                  ].slice(0, 5) // keep newest 5, drop only the oldest
                 : prev.previous;
               return { ...baseState, previous: newPrevious };
             });
@@ -337,8 +337,18 @@ export default function Home() {
     },
   ];
   const [demoIndex, setDemoIndex] = useState(0);
+  const [demoDirection, setDemoDirection] = useState<1 | -1>(1); // 1 = forward, -1 = reverse
   const cycleDemo = () => {
-    const nextIndex = (demoIndex + 1) % DEMO_STATES.length;
+    // Cycle 0→1→2→3→2→1→2→3... (ping-pong, never back to 0) — history grows then shrinks gradually
+    const n = DEMO_STATES.length;
+    let nextIndex = demoIndex + demoDirection;
+    if (nextIndex >= n) {
+      nextIndex = n - 2; // 3 → 2
+      setDemoDirection(-1);
+    } else if (nextIndex < 1) {
+      nextIndex = 2; // bounce at 1: go 1→2 (reverse direction)
+      setDemoDirection(1);
+    }
     const next = DEMO_STATES[nextIndex];
     setDemoIndex(nextIndex);
     setChordGraphState(next.state);
