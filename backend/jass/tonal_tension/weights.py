@@ -5,12 +5,11 @@ PAPER_WEIGHTS_TABLE1: dict[str, float] = {
     # From Table 1 (Experiment 1): statistically significant indicators.
     # Tonal distance (from the key) -> d2
     # Dissonance -> c
-    "d1": 0.01,
-    "d2": 0.14,
-    "d3": 0.0001,
-    "c": 0.1,
+    "d1": 0.4,
+    "d2": 2,
+    "d3": 1.4,
+    "c": 2,
 }
-
 
 def normalize_weights(weights: dict[str, float]) -> dict[str, float]:
     total = float(sum(float(x) for x in weights.values()))
